@@ -1,0 +1,25 @@
+# ============================================================
+#  SAÉ Running — Configuration Cron (VM)
+#  À installer avec : crontab cron/crontab.example
+# ============================================================
+#
+#  Vérifier les chemins avant d'activer :
+#    - /chemin/vers/projet  → chemin absolu du dépôt sur la VM
+#    - /chemin/vers/venv    → chemin du virtualenv Python
+#
+#  Tester manuellement d'abord :
+#    /chemin/vers/venv/bin/python /chemin/vers/projet/scripts/pipeline.py
+#
+# ┌───── minute (0-59)
+# │ ┌───── heure (0-23)
+# │ │ ┌───── jour du mois (1-31)
+# │ │ │ ┌───── mois (1-12)
+# │ │ │ │ ┌───── jour de la semaine (0=dim, 1=lun … 6=sam)
+# │ │ │ │ │
+# * * * * *  commande
+
+# ── Pipeline principal : toutes les heures ─────────────────
+0 * * * * /chemin/vers/venv/bin/python /chemin/vers/projet/scripts/pipeline.py >> /chemin/vers/projet/logs/cron.log 2>&1
+
+# ── Ou : une fois par jour à 8h (si séances peu fréquentes) ─
+# 0 8 * * * /chemin/vers/venv/bin/python /chemin/vers/projet/scripts/pipeline.py >> /chemin/vers/projet/logs/cron.log 2>&1
