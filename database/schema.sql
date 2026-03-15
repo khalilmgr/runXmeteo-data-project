@@ -41,8 +41,8 @@ CREATE TABLE seances (
     date_seance     DATE         NOT NULL,
     heure_debut     TIME,
     lieu            VARCHAR(100) DEFAULT 'Parc de Champagne, Reims',
-    latitude        NUMERIC(9,6) DEFAULT 49.233,    -- coordonnées GPS Parc de Champagne
-    longitude       NUMERIC(9,6) DEFAULT 4.027,
+    latitude        NUMERIC(9,6) DEFAULT 49.240841,  -- coordonnées GPS Parc de Champagne
+    longitude       NUMERIC(9,6) DEFAULT 4.054274,
     description     TEXT,
     created_at      TIMESTAMP    DEFAULT NOW()
 );
