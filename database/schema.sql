@@ -154,8 +154,31 @@ CREATE TABLE meteo (
 );
 
 -- ============================================================
+--  TABLE : conditions_coureur
+--  Contexte physiologique de chaque coureur pour une séance
+--  Saisie manuelle avant/après chaque séance
+-- ============================================================
+DROP TABLE IF EXISTS conditions_coureur CASCADE;
+
+CREATE TABLE conditions_coureur (
+    id              SERIAL PRIMARY KEY,
+    coureur_id      INT          NOT NULL REFERENCES coureurs(id) ON DELETE CASCADE,
+    seance_id       INT          NOT NULL REFERENCES seances(id)  ON DELETE CASCADE,
+
+    a_jeun          BOOLEAN,                          -- à jeun au moment de la course
+    heures_sommeil  NUMERIC(4,1),                     -- heures de sommeil la nuit précédente
+    etat_general    SMALLINT CHECK (etat_general BETWEEN 1 AND 5), -- 1=très mauvais 5=excellent
+    courbatures     BOOLEAN      DEFAULT FALSE,        -- courbatures / douleurs légères
+    dernier_repas_h NUMERIC(4,1),                     -- heures depuis le dernier repas
+    notes           TEXT,                             -- remarques libres (stress, blessure...)
+
+    UNIQUE (coureur_id, seance_id),
+    created_at      TIMESTAMP    DEFAULT NOW()
+);
+
+-- ============================================================
 --  VUE : performances_avec_meteo
---  Croisement activités + météo — base des visualisations
+--  Croisement activités + météo + conditions — base des visu
 -- ============================================================
 CREATE OR REPLACE VIEW performances_avec_meteo AS
 SELECT
@@ -191,10 +214,20 @@ SELECT
     m.vent_direction_deg,
     m.precipitation_mm,
     m.pression_hpa,
-    m.uv_index
+    m.uv_index,
+
+    -- Conditions physiologiques
+    cc.a_jeun,
+    cc.heures_sommeil,
+    cc.etat_general,
+    cc.courbatures,
+    cc.dernier_repas_h,
+    cc.notes
 
 FROM activites a
-JOIN coureurs c ON c.id = a.coureur_id
-JOIN seances  s ON s.id = a.seance_id
-LEFT JOIN meteo m ON m.seance_id = a.seance_id
+JOIN coureurs c  ON c.id  = a.coureur_id
+JOIN seances  s  ON s.id  = a.seance_id
+LEFT JOIN meteo            m  ON m.seance_id  = a.seance_id
+LEFT JOIN conditions_coureur cc ON cc.coureur_id = a.coureur_id
+                                AND cc.seance_id  = a.seance_id
 ORDER BY s.numero, a.allure_moyenne_s;
