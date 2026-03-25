@@ -4,3 +4,4 @@ venv/
 logs/
 __pycache__/
 *.pyc
+data/conditions.json
