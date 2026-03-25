@@ -139,42 +139,90 @@ def _load_from_postgres() -> pd.DataFrame:
 
 # ── Source CSV (fallback) ──────────────────────────────────────────────────────
 
-def _load_from_csv() -> pd.DataFrame:
-    import re
+COUREURS_CONNUS = ["Adrien", "Nathan", "Khalil", "Arthur"]
 
-    csv_path = Path(__file__).parent.parent / "Seance1.csv"
+
+def _get_coureur(titre: str) -> str | None:
+    for nom in COUREURS_CONNUS:
+        if nom.lower() in str(titre).lower():
+            return nom
+    return None
+
+
+def _col(row, *noms):
+    for nom in noms:
+        val = row.get(nom)
+        if val is not None and str(val).strip() not in ("--", "", "nan"):
+            return val
+    return None
+
+
+def _parse_seance(csv_path: Path, numero: int) -> pd.DataFrame:
+    import re
     df = pd.read_csv(csv_path)
     df.columns = df.columns.str.strip()
 
-    df["Coureur"] = df["Titre"].str.replace(r"\d.*$", "", regex=True).str.strip()
-    df["Séance"] = 1
-    df["Date"] = "2026-03-12"
+    # Garder uniquement les courses à pied des 4 coureurs
+    df = df[df["Type d'activité"].str.lower().str.contains("course", na=False)].copy()
+    df["Coureur"] = df["Titre"].apply(_get_coureur)
+    df = df[df["Coureur"].notna()].copy()
 
-    df["Allure_s"] = df["Allure moyenne"].apply(pace_to_seconds)
-    df["Meilleure_allure_s"] = df["Meilleure allure"].apply(pace_to_seconds)
+    if df.empty:
+        return pd.DataFrame()
+
+    df["Séance"] = numero
+    df["Date"] = df["Date"].str[:10]
+
+    # Allure — deux noms de colonnes possibles selon le type d'export
+    df["Allure_s"] = df.apply(lambda r: pace_to_seconds(_col(r, "Allure moyenne", "Vitesse moyenne")), axis=1)
+    df["Meilleure_allure_s"] = df.apply(lambda r: pace_to_seconds(_col(r, "Meilleure allure", "Vitesse max")), axis=1)
     df["Allure_str"] = df["Allure_s"].apply(seconds_to_pace_str)
     df["Meilleure_allure_str"] = df["Meilleure_allure_s"].apply(seconds_to_pace_str)
 
     df["Durée_s"] = df["Durée"].apply(duration_to_seconds)
     df["Durée_min"] = df["Durée_s"] / 60
-
     df["Distance"] = pd.to_numeric(df["Distance"], errors="coerce")
     df["Calories"] = pd.to_numeric(df["Calories"], errors="coerce")
     df["FC_moy"] = pd.to_numeric(df["Fréquence cardiaque moyenne"], errors="coerce")
     df["FC_max"] = pd.to_numeric(df["Fréquence cardiaque maximale"], errors="coerce")
-    df["Cadence_moy"] = pd.to_numeric(df["Cadence de course moyenne"], errors="coerce")
+
+    # Cadence — deux noms possibles
+    df["Cadence_moy"] = df.apply(
+        lambda r: clean_int(_col(r, "Cadence de course moyenne", "Cadence de vélo moyenne")), axis=1
+    )
     df["Foulée_moy"] = pd.to_numeric(df["Longueur moyenne des foulées"], errors="coerce")
     df["Puissance_moy"] = pd.to_numeric(df["Puissance moyenne"], errors="coerce")
-    df["Puissance_max"] = pd.to_numeric(df["Puissance max."], errors="coerce")
     df["TE"] = pd.to_numeric(df["TE aérobie"], errors="coerce")
     df["Pas"] = df["Pas"].apply(clean_int)
 
-    # Colonnes météo vides en mode CSV
-    for col in ["Météo_Temp", "Météo_TempRessentie", "Météo_Humidite",
-                "Météo_Vent", "Météo_Precipitation"]:
-        df[col] = None
+    for c in ["Météo_Temp", "Météo_TempRessentie", "Météo_Humidite", "Météo_Vent", "Météo_Precipitation"]:
+        df[c] = None
 
     return df
+
+
+def _load_from_csv() -> pd.DataFrame:
+    import re
+    root = Path(__file__).parent.parent
+
+    # Détecter tous les SeanceN.csv à la racine ou dans data/
+    csv_files = sorted([
+        *root.glob("Seance*.csv"),
+        *root.glob("data/Seance*.csv"),
+    ])
+
+    frames = []
+    for csv_path in csv_files:
+        match = re.search(r"(\d+)", csv_path.stem)
+        numero = int(match.group(1)) if match else 0
+        frame = _parse_seance(csv_path, numero)
+        if not frame.empty:
+            frames.append(frame)
+
+    if not frames:
+        return pd.DataFrame()
+
+    return pd.concat(frames, ignore_index=True)
 
 
 # ── Point d'entrée public ──────────────────────────────────────────────────────
