@@ -90,9 +90,29 @@ def clean_float(value) -> float | None:
         return None
 
 
-def extract_coureur(titre: str) -> str:
-    """'Adrien400m' → 'Adrien'"""
-    return re.sub(r"\d.*$", "", str(titre)).strip()
+COUREURS_CONNUS = ["Adrien", "Nathan", "Khalil", "Arthur"]
+
+
+def extract_coureur(titre: str) -> str | None:
+    """
+    Extrait le nom du coureur depuis le titre Garmin.
+    Exemples : 'Adrien400m' → 'Adrien' | 'Arthur400m_s2' → 'Arthur'
+    Retourne None si le titre ne correspond pas à une activité de séance.
+    """
+    titre = str(titre).strip()
+    for nom in COUREURS_CONNUS:
+        if nom.lower() in titre.lower():
+            return nom
+    return None
+
+
+def col(row, *noms):
+    """Retourne la première valeur non nulle parmi plusieurs noms de colonnes possibles."""
+    for nom in noms:
+        val = row.get(nom)
+        if val is not None and str(val).strip() not in ("--", "", "nan"):
+            return val
+    return None
 
 
 # ── Chargement et parsing du CSV ───────────────────────────────────────────────
@@ -101,13 +121,17 @@ def parse_csv(csv_path: Path) -> list[dict]:
     df = pd.read_csv(csv_path)
     df.columns = df.columns.str.strip()
 
+    # Filtrer uniquement les courses à pied des coureurs connus
+    df = df[df["Type d'activité"].str.lower().str.contains("course", na=False)]
+
     rows = []
     for _, row in df.iterrows():
         coureur = extract_coureur(row.get("Titre", ""))
         if not coureur:
-            log.warning("Ligne ignorée — titre vide ou non parsable : %s", row.get("Titre"))
+            log.info("Ligne ignorée (pas une activité de séance) : %s", row.get("Titre"))
             continue
 
+        # Allure : Garmin utilise "Allure moyenne" ou "Vitesse moyenne" selon l'export
         record = {
             "coureur_nom":              coureur,
             "garmin_titre":             str(row.get("Titre", "")).strip(),
@@ -119,15 +143,17 @@ def parse_csv(csv_path: Path) -> list[dict]:
             "nombre_pas":               clean_int(row.get("Pas")),
             "nombre_tours":             clean_int(row.get("Nombre de tours")),
 
-            "allure_moyenne_s":         pace_to_seconds(row.get("Allure moyenne", "")),
-            "meilleure_allure_s":       pace_to_seconds(row.get("Meilleure allure", "")),
+            # Allure : deux noms de colonnes possibles selon le type d'export Garmin
+            "allure_moyenne_s":         pace_to_seconds(col(row, "Allure moyenne", "Vitesse moyenne")),
+            "meilleure_allure_s":       pace_to_seconds(col(row, "Meilleure allure", "Vitesse max")),
             "gap_moyenne_s":            pace_to_seconds(row.get("GAP moyenne", "")),
 
             "fc_moyenne":               clean_int(row.get("Fréquence cardiaque moyenne")),
             "fc_maximale":              clean_int(row.get("Fréquence cardiaque maximale")),
 
-            "cadence_moyenne":          clean_int(row.get("Cadence de course moyenne")),
-            "cadence_maximale":         clean_int(row.get("Cadence de course maximale")),
+            # Cadence : "Cadence de course" ou "Cadence de vélo" selon l'export
+            "cadence_moyenne":          clean_int(col(row, "Cadence de course moyenne", "Cadence de vélo moyenne")),
+            "cadence_maximale":         clean_int(col(row, "Cadence de course maximale", "Cadence de vélo maximale")),
 
             "foulee_moyenne_m":         clean_float(row.get("Longueur moyenne des foulées")),
 
