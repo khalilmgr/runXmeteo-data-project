@@ -1,5 +1,6 @@
 Claude.md
 venv/
+.venv/
 .env
 logs/
 __pycache__/
