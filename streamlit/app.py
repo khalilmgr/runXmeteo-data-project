@@ -155,10 +155,33 @@ if df.empty:
 if page == "Vue d'ensemble":
     st.title("Vue d'ensemble")
 
-    derniere_seance = df["Séance"].max()
-    df_kpi = df[df["Séance"] == derniere_seance].sort_values("Allure_s")
-    date_str = str(df_kpi["Date"].iloc[0]) if "Date" in df_kpi.columns else ""
-    st.caption(f"Séance {derniere_seance} · {date_str}")
+    nb_seances = df["Séance"].nunique()
+
+    if nb_seances == 1:
+        # ── 1 séance : affichage individuel par coureur ────────────────────────
+        seance = df["Séance"].iloc[0]
+        date_str = str(df["Date"].iloc[0]) if "Date" in df.columns else ""
+        st.caption(f"Séance {seance} · {date_str}")
+        df_kpi = df.sort_values("Allure_s")
+    else:
+        # ── Plusieurs séances : moyenne par coureur ────────────────────────────
+        seances_str = ", ".join(f"S{s}" for s in sorted(df["Séance"].unique()))
+        st.caption(f"Moyenne sur {nb_seances} séances ({seances_str})")
+        df_kpi = (
+            df.groupby("Coureur", sort=False)
+            .agg(
+                Allure_s=("Allure_s", "mean"),
+                Meilleure_allure_s=("Meilleure_allure_s", "min"),
+                FC_moy=("FC_moy", "mean"),
+                Distance=("Distance", "mean"),
+                Durée_min=("Durée_min", "mean"),
+            )
+            .reset_index()
+            .sort_values("Allure_s")
+        )
+        df_kpi["Distance"] = df_kpi["Distance"].round(2)
+        df_kpi["Allure_str"] = df_kpi["Allure_s"].apply(pace_str)
+        df_kpi["Meilleure_allure_str"] = df_kpi["Meilleure_allure_s"].apply(pace_str)
 
     # ── KPI Cards ─────────────────────────────────────────────────────────────
     cols = st.columns(len(df_kpi))
@@ -188,9 +211,10 @@ if page == "Vue d'ensemble":
             textfont=dict(color="white"),
             hovertemplate="<b>%{y}</b><br>Allure : %{text}<extra></extra>",
         ))
+        x_max = df_rank["Allure_s"].max() + 60
         fig.update_layout(
             **LAYOUT, height=280,
-            xaxis=dict(**_AXIS, autorange="reversed", title="s/km"),
+            xaxis=dict(**_AXIS, range=[x_max, 0], dtick=30, title="s/km"),
         )
         st.plotly_chart(fig, use_container_width=True)
 
