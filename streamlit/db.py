@@ -222,7 +222,11 @@ def _load_from_csv() -> pd.DataFrame:
     if not frames:
         return pd.DataFrame()
 
-    return pd.concat(frames, ignore_index=True)
+    df = pd.concat(frames, ignore_index=True)
+    # Garmin exporte en cumulatif : Seance2.csv contient aussi les activités de Seance1.
+    # On garde la première occurrence (séance la plus basse) pour chaque (Coureur, Date).
+    df = df.sort_values("Séance").drop_duplicates(subset=["Coureur", "Date"], keep="first").reset_index(drop=True)
+    return df
 
 
 # ── Point d'entrée public ──────────────────────────────────────────────────────
