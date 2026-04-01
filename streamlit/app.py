@@ -172,7 +172,7 @@ if page == "Vue d'ensemble":
             .agg(
                 Allure_s=("Allure_s", "mean"),
                 Meilleure_allure_s=("Meilleure_allure_s", "min"),
-                FC_moy=("FC_moy", "mean"),
+                FC_max=("FC_max", "max"),
                 Distance=("Distance", "mean"),
                 Durée_min=("Durée_min", "mean"),
             )
@@ -189,7 +189,7 @@ if page == "Vue d'ensemble":
         with cols[i]:
             st.markdown(kpi_card(
                 row["Coureur"], row["Allure_str"], row["Meilleure_allure_str"],
-                row["FC_moy"], row["Distance"], row["Durée_min"]
+                row["FC_max"], row["Distance"], row["Durée_min"]
             ), unsafe_allow_html=True)
 
     st.divider()
@@ -214,7 +214,7 @@ if page == "Vue d'ensemble":
         x_max = df_rank["Allure_s"].max() + 60
         fig.update_layout(
             **LAYOUT, height=280,
-            xaxis=dict(**_AXIS, range=[x_max, 0], dtick=30, title="s/km"),
+            xaxis=dict(**_AXIS, range=[0, x_max], dtick=30, title="s/km"),
         )
         st.plotly_chart(fig, use_container_width=True)
 
