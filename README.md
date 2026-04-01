@@ -22,10 +22,6 @@ Pour y répondre, nous collectons nos propres données de course (Garmin FIT sec
         │
         ▼
 [scripts/extract_tour2.py] ──► [data/fit/tour2_results.csv]
-        │
-[Export Garmin CSV résumé]
-        │
-        ▼
 [scripts/ingest_csv.py] ──────────────────────┐
                                                ▼
 [API Open-Meteo] ──► [scripts/ingest_meteo.py] ──► [PostgreSQL]
@@ -45,7 +41,7 @@ Le script `scripts/pipeline.py` orchestre l'ensemble et est déclenché automati
 ```
 SAE_data/
 ├── data/
-│   ├── Seance1.csv … Seance4.csv   # Résumés Garmin bruts (1 ligne/coureur/séance)
+│   ├── Seance1.csv … Seance4.csv   # Archives Garmin (historique, non utilisées par le pipeline actuel)
 │   ├── fit/                         # Fichiers FIT second-par-second
 │   │   ├── {Coureur}_s{N}.csv      # Ex: Khalil_s2.csv
 │   │   └── tour2_results.csv       # Métriques Tour 2 extraites (source principale dashboard)
@@ -55,7 +51,7 @@ SAE_data/
 │   └── schema.sql                  # Schéma PostgreSQL (5 tables + 1 vue)
 ├── scripts/
 │   ├── extract_tour2.py            # Extraction Tour 2 depuis fichiers FIT
-│   ├── ingest_csv.py               # Ingestion CSV Garmin → PostgreSQL
+│   ├── ingest_csv.py               # Ingestion Tour 2 (tour2_results.csv) → PostgreSQL
 │   ├── ingest_meteo.py             # Ingestion API Open-Meteo → PostgreSQL
 │   ├── fetch_garmin.py             # Export activités Garmin API → CSV
 │   └── pipeline.py                 # Orchestrateur principal (cron)
@@ -225,7 +221,7 @@ cp .env.example .env
 # Déposer les FIT CSV dans data/fit/ puis extraire le Tour 2
 python scripts/extract_tour2.py
 
-# Ingérer les CSV résumés et récupérer la météo
+# Ingérer les métriques Tour 2 + météo dans PostgreSQL
 python scripts/pipeline.py
 ```
 
@@ -282,15 +278,3 @@ streamlit run streamlit/app.py --server.port 8501
 | Niveaux physiques hétérogènes | Comparaison absolue peu pertinente | ✅ Progression % neutralise l'effet |
 | Apprentissage du parcours S1→S2 | Amélioration non liée à la forme physique | ⚠️ Mentionné en note critique |
 | Anomalie FC Nathan S2 (moy 115 bpm) | Valeur aberrante probable capteur | ⚠️ Signalé dans les visualisations |
-
----
-
-## Organisation du travail
-
-| Membre | Responsabilité |
-|--------|----------------|
-| Khalil | Pipeline ingestion FIT + extraction Tour 2 + Dashboard Streamlit + VM/cron |
-| Adrien | Pipeline météo Open-Meteo + base de données PostgreSQL |
-| Nathan | Dashboard Power BI |
-| Arthur | Dashboard Power BI |
-| Tous | Documentation, journal de bord, analyse critique, soutenance |
