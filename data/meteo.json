@@ -1,0 +1,46 @@
+[
+  {
+    "seance": 1,
+    "temperature_c": 12.5,
+    "temperature_ressentie_c": 7.4,
+    "humidite_pct": 51,
+    "vent_kmh": 23.6,
+    "vent_direction_deg": 218,
+    "precipitation_mm": 0.0,
+    "pression_hpa": 1004.5,
+    "uv_index": null
+  },
+  {
+    "seance": 2,
+    "temperature_c": 15.4,
+    "temperature_ressentie_c": 12.2,
+    "humidite_pct": 45,
+    "vent_kmh": 15.1,
+    "vent_direction_deg": 62,
+    "precipitation_mm": 0.0,
+    "pression_hpa": 1006.5,
+    "uv_index": null
+  },
+  {
+    "seance": 3,
+    "temperature_c": 5.3,
+    "temperature_ressentie_c": 0.1,
+    "humidite_pct": 80,
+    "vent_kmh": 23.6,
+    "vent_direction_deg": 290,
+    "precipitation_mm": 1.4,
+    "pression_hpa": 994.1,
+    "uv_index": null
+  },
+  {
+    "seance": 4,
+    "temperature_c": 7.8,
+    "temperature_ressentie_c": 4.2,
+    "humidite_pct": 87,
+    "vent_kmh": 16.7,
+    "vent_direction_deg": 292,
+    "precipitation_mm": 0.1,
+    "pression_hpa": 1005.3,
+    "uv_index": null
+  }
+]

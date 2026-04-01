@@ -1,21 +1,23 @@
 """
-app.py — SAÉ Running Dashboard
-6 pages : Vue d'ensemble | Performance | Biomécanique | Météo | Tête-à-tête | Conditions
+app.py — SAÉ Running Dashboard (refonte Tour 2)
+───────────────────────────────────────────────
+Toutes les métriques sont calculées sur le Tour 2 (400m effort maximal).
+17 sections.
 """
 
-import json
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from db import load_data
+from db import load_data, load_fit_segment, load_all_tours, COUREURS_CONNUS, POIDS
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="SAÉ Running",
+    page_title="SAÉ Running — Tour 2",
     page_icon="🏃",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -28,16 +30,8 @@ COLORS = {
     "Khalil": "#1565C0",
 }
 
-# Styles d'axes réutilisables
 _AXIS = dict(gridcolor="#2a2a2a", tickcolor="#555", linecolor="#555", zerolinecolor="#333")
 
-def xax(**kwargs):
-    return dict(**_AXIS, **kwargs)
-
-def yax(**kwargs):
-    return dict(**_AXIS, **kwargs)
-
-# Template de layout Plotly (sans xaxis/yaxis pour éviter les conflits)
 LAYOUT = dict(
     plot_bgcolor="rgba(0,0,0,0)",
     paper_bgcolor="rgba(0,0,0,0)",
@@ -51,63 +45,31 @@ st.markdown("""
 <style>
     .stApp { background-color: #0d0d0d; color: #e0e0e0; }
     section[data-testid="stSidebar"] { background-color: #111111; }
-    h1, h2, h3 { color: #f0f0f0; font-family: monospace; }
-    .stDivider { border-color: #2a2a2a; }
-    .stDataFrame { background: #1a1a1a; }
-    div[data-testid="stMetric"] { background: #1a1a1a; border: 1px solid #2a2a2a;
-                                   border-radius: 8px; padding: 10px; }
+    h1,h2,h3 { color: #f0f0f0; font-family: monospace; }
+    div[data-testid="stMetric"] { background:#1a1a1a; border:1px solid #2a2a2a;
+                                   border-radius:8px; padding:10px; }
 </style>
 """, unsafe_allow_html=True)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
-def pace_str(s):
+def add_trendline(fig, x, y, color="#666"):
+    mask = pd.notna(x) & pd.notna(y)
+    xc, yc = np.array(x[mask], float), np.array(y[mask], float)
+    if len(xc) < 3:
+        return
+    m, b = np.polyfit(xc, yc, 1)
+    xl = np.linspace(xc.min(), xc.max(), 100)
+    fig.add_trace(go.Scatter(x=xl, y=m*xl+b, mode="lines",
+                             line=dict(color=color, dash="dot", width=1.5),
+                             showlegend=False, hoverinfo="skip"))
+
+
+def fmt_time(s):
     if s is None or pd.isna(s):
         return "N/A"
-    return f"{int(s)//60}:{int(s)%60:02d}/km"
-
-
-def add_trendline(fig, x_series, y_series, color="#666", dash="dot"):
-    """Ajoute une droite de régression linéaire OLS sur un scatter."""
-    mask = pd.notna(x_series) & pd.notna(y_series)
-    x_c, y_c = np.array(x_series[mask], dtype=float), np.array(y_series[mask], dtype=float)
-    if len(x_c) < 3:
-        return
-    m, b = np.polyfit(x_c, y_c, 1)
-    x_line = np.linspace(x_c.min(), x_c.max(), 100)
-    fig.add_trace(go.Scatter(
-        x=x_line, y=m * x_line + b,
-        mode="lines",
-        line=dict(color=color, dash=dash, width=1.5),
-        showlegend=False,
-        hoverinfo="skip",
-    ))
-
-
-def normalize(series, higher_is_better=True, ref_series=None):
-    """Normalise une série entre 0 et 100."""
-    s = ref_series if ref_series is not None else series
-    mn, mx = s.min(), s.max()
-    if mx == mn:
-        return pd.Series([50.0] * len(series), index=series.index)
-    if higher_is_better:
-        return (series - mn) / (mx - mn) * 100
-    return (mx - series) / (mx - mn) * 100
-
-
-def kpi_card(coureur, allure, meilleure, fc, distance, duree):
-    color = COLORS.get(coureur, "#888")
-    fc_val = f"{int(fc)} bpm" if not pd.isna(fc) else "N/A"
-    return f"""
-    <div style="border-left:4px solid {color}; padding:14px 18px; border-radius:8px;
-                background:#1a1a1a; margin-bottom:8px;">
-        <h3 style="margin:0 0 8px 0; color:{color}; font-family:monospace;">{coureur}</h3>
-        <p style="margin:2px 0; color:#e0e0e0; font-size:1.1em;">⏱ <b>{allure}</b></p>
-        <p style="margin:2px 0; color:#999;">🏅 Meilleure : {meilleure}</p>
-        <p style="margin:2px 0; color:#999;">❤️ FC moy : {fc_val}</p>
-        <p style="margin:2px 0; color:#999;">📏 {distance} km · {duree:.1f} min</p>
-    </div>"""
+    return f"{int(s)//60}:{int(s)%60:02d}"
 
 
 # ── Chargement ─────────────────────────────────────────────────────────────────
@@ -115,1027 +77,1554 @@ def kpi_card(coureur, allure, meilleure, fc, distance, duree):
 def get_data():
     return load_data()
 
+@st.cache_data(ttl=300)
+def get_fit(coureur, seance, window):
+    return load_fit_segment(coureur, seance, window)
+
+
 df_all, source = get_data()
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## 🏃 SAÉ Running")
-    st.caption(f"Source : **{source}**")
+    st.caption(f"Source : **{source}** · données **Tour 2** uniquement")
     st.divider()
 
-    page = st.radio("Navigation", [
-        "Vue d'ensemble",
-        "Performance",
-        "Biomécanique",
-        "Météo & Corrélations",
-        "Tête-à-tête",
-        "Conditions & Contexte",
+    page = st.radio("Section", [
+        "1 · KPI & Classement",
+        "2 · Temps 400m & Météo",
+        "3 · Puissance & Effort",
+        "4 · Face-à-tête",
+        "5 · Profil de vitesse",
+        "6 · Accélérations",
+        "7 · Récupération cardiaque",
+        "8 · Heatmap Météo",
+        "9 · Progression",
+        "10 · Carte GPS animée",
+        "11 · Tour 1 / 2 / 3",
+        "12 · Splits 100m",
+        "13 · Distribution vitesses",
+        "14 · Allure instantanée",
+        "15 · Puissance W/kg",
+        "16 · FC vs Distance",
+        "17 · Vent & Direction",
     ])
 
     st.divider()
     seances_dispo = sorted(df_all["Séance"].unique())
     seances_sel = st.multiselect("Séance(s)", seances_dispo, default=seances_dispo)
+    coureurs_sel = st.multiselect("Coureur(s)", sorted(df_all["Coureur"].unique()),
+                                  default=sorted(df_all["Coureur"].unique()))
 
-    coureurs_dispo = sorted(df_all["Coureur"].unique())
-    coureurs_sel = st.multiselect("Coureur(s)", coureurs_dispo, default=coureurs_dispo)
-
-df = df_all[
-    df_all["Séance"].isin(seances_sel) &
-    df_all["Coureur"].isin(coureurs_sel)
-].copy()
+df = df_all[df_all["Séance"].isin(seances_sel) & df_all["Coureur"].isin(coureurs_sel)].copy()
 
 if df.empty:
-    st.warning("Aucune donnée pour la sélection en cours.")
+    st.warning("Aucune donnée pour la sélection.")
     st.stop()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  PAGE 1 — VUE D'ENSEMBLE
+#  1 — KPI & CLASSEMENT
 # ══════════════════════════════════════════════════════════════════════════════
-if page == "Vue d'ensemble":
-    st.title("Vue d'ensemble")
+if page == "1 · KPI & Classement":
+    st.title("KPI — Meilleurs résultats Tour 2")
+    st.caption("Records personnels sur l'ensemble des séances disponibles")
 
-    nb_seances = df["Séance"].nunique()
+    # Agrégation des records par coureur
+    records = []
+    for coureur in sorted(coureurs_sel):
+        dc = df_all[df_all["Coureur"] == coureur]
+        if dc.empty:
+            continue
+        best_t400 = dc["Temps400m_s"].min()
+        best_allure = dc["Allure_s"].min()
+        fc_max = dc["FC_max"].max() if dc["FC_max"].notna().any() else None
+        cad_max = dc["Cadence_spm"].max() if dc["Cadence_spm"].notna().any() else None
+        pwr_max = dc["Puissance_w"].max() if dc["Puissance_w"].notna().any() else None
+        records.append({
+            "coureur": coureur,
+            "best_t400": best_t400,
+            "best_allure": best_allure,
+            "fc_max": fc_max,
+            "cad_max": cad_max,
+            "pwr_max": pwr_max,
+        })
 
-    if nb_seances == 1:
-        # ── 1 séance : affichage individuel par coureur ────────────────────────
-        seance = df["Séance"].iloc[0]
-        date_str = str(df["Date"].iloc[0]) if "Date" in df.columns else ""
-        st.caption(f"Séance {seance} · {date_str}")
-        df_kpi = df.sort_values("Allure_s")
-    else:
-        # ── Plusieurs séances : moyenne par coureur ────────────────────────────
-        seances_str = ", ".join(f"S{s}" for s in sorted(df["Séance"].unique()))
-        st.caption(f"Moyenne sur {nb_seances} séances ({seances_str})")
-        df_kpi = (
-            df.groupby("Coureur", sort=False)
-            .agg(
-                Allure_s=("Allure_s", "mean"),
-                Meilleure_allure_s=("Meilleure_allure_s", "min"),
-                FC_max=("FC_max", "max"),
-                Distance=("Distance", "mean"),
-                Durée_min=("Durée_min", "mean"),
-            )
-            .reset_index()
-            .sort_values("Allure_s")
-        )
-        df_kpi["Distance"] = df_kpi["Distance"].round(2)
-        df_kpi["Allure_str"] = df_kpi["Allure_s"].apply(pace_str)
-        df_kpi["Meilleure_allure_str"] = df_kpi["Meilleure_allure_s"].apply(pace_str)
-
-    # ── KPI Cards ─────────────────────────────────────────────────────────────
-    cols = st.columns(len(df_kpi))
-    for i, (_, row) in enumerate(df_kpi.iterrows()):
+    cols = st.columns(len(records))
+    for i, r in enumerate(records):
+        color = COLORS.get(r["coureur"], "#888")
         with cols[i]:
-            st.markdown(kpi_card(
-                row["Coureur"], row["Allure_str"], row["Meilleure_allure_str"],
-                row["FC_max"], row["Distance"], row["Durée_min"]
-            ), unsafe_allow_html=True)
+            t400 = fmt_time(r["best_t400"])
+            fc   = f"{int(r['fc_max'])} bpm" if r["fc_max"] and not pd.isna(r["fc_max"]) else "N/A"
+            cad  = f"{int(r['cad_max'])} spm" if r["cad_max"] and not pd.isna(r["cad_max"]) else "N/A"
+            pwr  = f"{int(r['pwr_max'])} W"   if r["pwr_max"] and not pd.isna(r["pwr_max"]) else "N/A"
+            st.markdown(f"""
+            <div style="border-left:4px solid {color}; padding:16px 18px; border-radius:8px;
+                        background:#1a1a1a; margin-bottom:8px;">
+                <h3 style="margin:0 0 10px 0; color:{color}; font-family:monospace;">{r['coureur']}</h3>
+                <p style="margin:4px 0; font-size:1.4em; color:#fff;">⏱ <b>{t400}</b> <span style="font-size:0.7em;color:#999">/ 400m</span></p>
+                <p style="margin:4px 0; color:#aaa;">❤️ FC max : <b style="color:#fff">{fc}</b></p>
+                <p style="margin:4px 0; color:#aaa;">👟 Cadence max : <b style="color:#fff">{cad}</b></p>
+                <p style="margin:4px 0; color:#aaa;">⚡ Puissance max : <b style="color:#fff">{pwr}</b></p>
+            </div>""", unsafe_allow_html=True)
 
     st.divider()
     col1, col2 = st.columns(2)
 
-    # ── Classement horizontal ──────────────────────────────────────────────────
     with col1:
-        st.subheader("Classement")
-        st.caption("Allure moyenne — plus à gauche = plus rapide")
-
-        df_rank = df_kpi.sort_values("Allure_s", ascending=True)
+        st.subheader("Classement — Temps au 400m")
+        st.caption("Meilleur temps normalisé à 400m exact · Tour 2 uniquement")
+        df_r = pd.DataFrame(records).sort_values("best_t400")
+        df_r["label"] = df_r["best_t400"].apply(fmt_time)
         fig = go.Figure(go.Bar(
-            x=df_rank["Allure_s"],
-            y=df_rank["Coureur"],
-            orientation="h",
-            marker_color=[COLORS.get(c, "#888") for c in df_rank["Coureur"]],
-            text=df_rank["Allure_str"],
-            textposition="outside",
+            x=df_r["best_t400"], y=df_r["coureur"], orientation="h",
+            marker_color=[COLORS.get(c, "#888") for c in df_r["coureur"]],
+            text=df_r["label"], textposition="outside",
             textfont=dict(color="white"),
-            hovertemplate="<b>%{y}</b><br>Allure : %{text}<extra></extra>",
+            hovertemplate="<b>%{y}</b><br>%{text}<extra></extra>",
         ))
-        x_max = df_rank["Allure_s"].max() + 60
-        fig.update_layout(
-            **LAYOUT, height=280,
-            xaxis=dict(**_AXIS, range=[0, x_max], dtick=30, title="s/km"),
-        )
+        fig.update_layout(**LAYOUT, height=280,
+                          xaxis=dict(**_AXIS, title="secondes"),
+                          yaxis=dict(**_AXIS))
         st.plotly_chart(fig, use_container_width=True)
 
-    # ── Records personnels ─────────────────────────────────────────────────────
     with col2:
-        st.subheader("Records personnels")
-        st.caption("Meilleures performances toutes séances confondues")
-
-        records = []
-        for coureur in sorted(coureurs_sel):
-            dc = df_all[df_all["Coureur"] == coureur]
-            if dc.empty:
-                continue
-            records.append({
-                "Coureur": coureur,
-                "Meilleure allure": pace_str(dc["Allure_s"].min()),
-                "Sprint": pace_str(dc["Meilleure_allure_s"].min()),
-                "FC min": f"{int(dc['FC_moy'].min())} bpm" if dc["FC_moy"].notna().any() else "N/A",
-                "Foulée max": f"{dc['Foulée_moy'].max():.2f} m" if dc["Foulée_moy"].notna().any() else "N/A",
-            })
-
-        if records:
-            st.dataframe(
-                pd.DataFrame(records).set_index("Coureur"),
-                use_container_width=True, height=260,
-            )
+        st.subheader("FC max atteinte")
+        st.caption("Fréquence cardiaque maximale — Tour 2")
+        df_r2 = pd.DataFrame(records).dropna(subset=["fc_max"]).sort_values("fc_max", ascending=False)
+        fig2 = go.Figure(go.Bar(
+            x=df_r2["coureur"], y=df_r2["fc_max"],
+            marker_color=[COLORS.get(c, "#888") for c in df_r2["coureur"]],
+            text=[f"{int(v)} bpm" for v in df_r2["fc_max"]],
+            textposition="outside", textfont=dict(color="white"),
+        ))
+        fig2.update_layout(**LAYOUT, height=280,
+                           yaxis=dict(**_AXIS, title="bpm"))
+        st.plotly_chart(fig2, use_container_width=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  PAGE 2 — PERFORMANCE
+#  2 — TEMPS 400M & MÉTÉO
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "Performance":
-    st.title("Performance")
+elif page == "2 · Temps 400m & Météo":
+    st.title("Temps au 400m & Conditions météo")
 
+    has_meteo = "temperature_c" in df.columns and df["temperature_c"].notna().any()
+
+    if not has_meteo:
+        st.warning("Données météo non disponibles. Vérifiez `data/meteo.json`.")
+        st.stop()
+
+    # Météo par séance (1 ligne par séance)
+    df_meteo = df.drop_duplicates("Séance").sort_values("Séance")
+
+    st.subheader("Conditions par séance")
+    mcols = st.columns(len(df_meteo))
+    for i, (_, row) in enumerate(df_meteo.iterrows()):
+        with mcols[i]:
+            st.markdown(f"""
+            <div style="border:1px solid #333; border-radius:8px; padding:14px;
+                        background:#1a1a1a; text-align:center;">
+                <h4 style="color:#e0e0e0; margin:0 0 6px 0;">Séance {int(row['Séance'])}</h4>
+                <p style="color:#aaa; margin:2px 0; font-size:0.85em;">{row.get('Date','')}</p>
+                <p style="font-size:1.8em; margin:6px 0;">🌡️</p>
+                <p style="color:#fff; margin:2px 0;"><b>{row['temperature_c']:.1f}°C</b>
+                   <span style="color:#888; font-size:0.85em"> (ressenti {row.get('temperature_ressentie_c', row['temperature_c']):.1f}°C)</span></p>
+                <p style="color:#aaa; margin:2px 0; font-size:0.9em;">💧 {int(row['humidite_pct'])}% · 💨 {row['vent_kmh']:.1f} km/h</p>
+                <p style="color:#aaa; margin:2px 0; font-size:0.9em;">🌧️ {row['precipitation_mm']:.1f} mm</p>
+            </div>""", unsafe_allow_html=True)
+
+    st.divider()
     col1, col2 = st.columns(2)
 
-    # ── Allure par séance ──────────────────────────────────────────────────────
     with col1:
-        st.subheader("Allure moyenne par séance")
-        st.caption("Barres groupées par séance — plus bas = plus rapide")
+        st.subheader("Temps 400m & Température")
+        st.caption("Double axe : barres = temps au 400m · ligne = température")
 
+        seances = sorted(df["Séance"].unique())
         fig = go.Figure()
-        for i, seance in enumerate(sorted(df["Séance"].unique())):
-            d = df[df["Séance"] == seance]
-            fig.add_trace(go.Bar(
-                name=f"Séance {seance}",
-                x=d["Coureur"],
-                y=d["Allure_s"],
-                text=d["Allure_str"],
-                textposition="outside",
-                textfont=dict(color="white", size=10),
-                marker_color=[COLORS.get(c, "#888") for c in d["Coureur"]],
-                opacity=0.55 + 0.25 * i,
-                hovertemplate="<b>%{x}</b> · S" + str(seance) + "<br>%{text}<extra></extra>",
+        for coureur in coureurs_sel:
+            dc = df[df["Coureur"] == coureur].sort_values("Séance")
+            if dc.empty:
+                continue
+            fig.add_trace(go.Scatter(
+                x=dc["Séance"], y=dc["Temps400m_s"],
+                name=coureur, mode="lines+markers",
+                line=dict(color=COLORS.get(coureur, "#888"), width=2),
+                marker=dict(size=10),
+                text=dc["Temps400m_str"],
+                hovertemplate=f"<b>{coureur}</b> · S%{{x}}<br>%{{text}}<extra></extra>",
+                yaxis="y1",
             ))
+        # Température
+        temps_meteo = [df_meteo[df_meteo["Séance"] == s]["temperature_c"].values[0]
+                       if s in df_meteo["Séance"].values else None for s in seances]
+        fig.add_trace(go.Scatter(
+            x=seances, y=temps_meteo, name="Température",
+            mode="lines+markers", yaxis="y2",
+            line=dict(color="#FF8F00", dash="dot", width=2),
+            marker=dict(size=8, symbol="diamond"),
+            hovertemplate="S%{x}<br>%{y:.1f}°C<extra></extra>",
+        ))
         fig.update_layout(
-            **LAYOUT, barmode="group", height=380,
-            yaxis=dict(**_AXIS, autorange="reversed", title="s/km"),
+            **LAYOUT, height=380,
+            xaxis=dict(**_AXIS, title="Séance", dtick=1),
+            yaxis=dict(**_AXIS, title="Temps 400m (s)", autorange="reversed"),
+            yaxis2=dict(**_AXIS, title="Température (°C)", overlaying="y",
+                        side="right", showgrid=False),
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    # ── % Progression ─────────────────────────────────────────────────────────
     with col2:
-        st.subheader("Progression vs Séance 1")
-        st.caption("% d'amélioration depuis S1 · positif = plus rapide")
-
-        seances_sorted = sorted(df["Séance"].unique())
-        if len(seances_sorted) < 2:
-            st.info("Nécessite au moins 2 séances.")
-        else:
-            s1 = df[df["Séance"] == seances_sorted[0]][["Coureur", "Allure_s"]].rename(columns={"Allure_s": "base"})
-            prog = df[df["Séance"] > seances_sorted[0]].merge(s1, on="Coureur")
-            prog["pct"] = (prog["base"] - prog["Allure_s"]) / prog["base"] * 100
-
-            fig2 = go.Figure()
-            for i, seance in enumerate(sorted(prog["Séance"].unique())):
-                d = prog[prog["Séance"] == seance].sort_values("Coureur")
-                fig2.add_trace(go.Bar(
-                    name=f"Séance {seance}",
-                    x=d["Coureur"],
-                    y=d["pct"],
-                    marker_color=[COLORS.get(c, "#888") for c in d["Coureur"]],
-                    opacity=0.55 + 0.25 * i,
-                    text=[f"{v:+.1f}%" for v in d["pct"]],
-                    textposition="outside",
-                    textfont=dict(color="white", size=10),
-                    hovertemplate="<b>%{x}</b><br>%{text}<extra></extra>",
-                ))
-            fig2.add_hline(y=0, line=dict(color="#555", width=1))
-            fig2.update_layout(**LAYOUT, barmode="group", height=380, yaxis_title="%")
-            st.plotly_chart(fig2, use_container_width=True)
-
-    col3, col4 = st.columns(2)
-
-    # ── Évolution dans le temps ────────────────────────────────────────────────
-    with col3:
-        st.subheader("Évolution de l'allure")
-        st.caption("Progression au fil des séances · pointillés = meilleur résultat personnel")
+        st.subheader("Temps 400m & Humidité / Vent")
 
         fig3 = go.Figure()
         for coureur in coureurs_sel:
             dc = df[df["Coureur"] == coureur].sort_values("Séance")
             if dc.empty:
                 continue
-            best = dc["Allure_s"].min()
-            color = COLORS.get(coureur, "#888")
-            # Ligne de PR en pointillés
-            fig3.add_hline(y=best, line=dict(color=color, dash="dot", width=0.8))
             fig3.add_trace(go.Scatter(
-                x=dc["Séance"], y=dc["Allure_s"],
-                name=coureur,
-                mode="lines+markers",
-                line=dict(color=color, width=2),
-                marker=dict(size=10, color=color, line=dict(width=2, color="#0d0d0d")),
-                text=dc["Allure_str"],
-                hovertemplate="<b>%{fullData.name}</b> · S%{x}<br>%{text}<extra></extra>",
+                x=dc["Séance"], y=dc["Temps400m_s"],
+                name=coureur, mode="lines+markers",
+                line=dict(color=COLORS.get(coureur, "#888"), width=2),
+                marker=dict(size=10),
+                text=dc["Temps400m_str"],
+                hovertemplate=f"<b>{coureur}</b> · S%{{x}}<br>%{{text}}<extra></extra>",
+                yaxis="y1",
             ))
+        vent = [df_meteo[df_meteo["Séance"] == s]["vent_kmh"].values[0]
+                if s in df_meteo["Séance"].values else None for s in seances]
+        fig3.add_trace(go.Bar(
+            x=seances, y=vent, name="Vent (km/h)",
+            marker_color="rgba(100,149,237,0.4)", yaxis="y2",
+            hovertemplate="S%{x}<br>%{y:.1f} km/h<extra></extra>",
+        ))
         fig3.update_layout(
-            **LAYOUT, height=360,
+            **LAYOUT, height=380,
             xaxis=dict(**_AXIS, title="Séance", dtick=1),
-            yaxis=dict(**_AXIS, autorange="reversed", title="s/km"),
+            yaxis=dict(**_AXIS, title="Temps 400m (s)", autorange="reversed"),
+            yaxis2=dict(**_AXIS, title="Vent (km/h)", overlaying="y",
+                        side="right", showgrid=False),
         )
         st.plotly_chart(fig3, use_container_width=True)
 
-    # ── Heatmap coureur × séance ───────────────────────────────────────────────
-    with col4:
-        st.subheader("Heatmap performances")
-        st.caption("Allure par coureur par séance · vert = rapide · rouge = lent")
+    st.divider()
+    st.subheader("Scatter : Température vs Temps au 400m")
+    st.caption("Chaque point = 1 coureur × 1 séance · droite = tendance globale")
 
-        pivot = df.pivot_table(index="Coureur", columns="Séance", values="Allure_s", aggfunc="mean")
-        text_piv = df.pivot_table(index="Coureur", columns="Séance", values="Allure_str", aggfunc="first")
-
-        fig4 = go.Figure(go.Heatmap(
-            z=pivot.values,
-            x=[f"S{c}" for c in pivot.columns],
-            y=pivot.index.tolist(),
-            text=text_piv.reindex(index=pivot.index, columns=pivot.columns).values,
-            texttemplate="%{text}",
-            textfont=dict(color="white", size=13),
-            colorscale=[[0, "#1B5E20"], [0.5, "#F9A825"], [1, "#B71C1C"]],
-            showscale=True,
-            hovertemplate="<b>%{y}</b> · %{x}<br>Allure : %{text}<extra></extra>",
+    df_s = df.dropna(subset=["temperature_c", "Temps400m_s"])
+    fig4 = go.Figure()
+    for coureur in coureurs_sel:
+        dc = df_s[df_s["Coureur"] == coureur]
+        if dc.empty:
+            continue
+        fig4.add_trace(go.Scatter(
+            x=dc["temperature_c"], y=dc["Temps400m_s"],
+            name=coureur, mode="markers",
+            marker=dict(size=14, color=COLORS.get(coureur, "#888"),
+                        line=dict(width=2, color="#0d0d0d")),
+            customdata=list(zip(dc["Temps400m_str"], dc["Séance"])),
+            hovertemplate=f"<b>{coureur}</b> · S%{{customdata[1]}}<br>"
+                          f"Temp : %{{x:.1f}}°C · %{{customdata[0]}}<extra></extra>",
         ))
-        fig4.update_layout(**LAYOUT, height=360)
+    add_trendline(fig4, df_s["temperature_c"], df_s["Temps400m_s"])
+    fig4.update_layout(
+        **LAYOUT, height=360,
+        xaxis=dict(**_AXIS, title="Température (°C)"),
+        yaxis=dict(**_AXIS, autorange="reversed", title="Temps 400m (s)"),
+    )
+    st.plotly_chart(fig4, use_container_width=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  3 — PUISSANCE & EFFORT
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "3 · Puissance & Effort":
+    st.title("Puissance & Effort — Tour 2")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Puissance moyenne par séance")
+        st.caption("Watts moyens sur le Tour 2 · profil Arthur 70 kg (non corrigé)")
+
+        fig = go.Figure()
+        for coureur in coureurs_sel:
+            dc = df[df["Coureur"] == coureur].sort_values("Séance")
+            if dc.empty or dc["Puissance_w"].isna().all():
+                continue
+            fig.add_trace(go.Scatter(
+                x=dc["Séance"], y=dc["Puissance_w"],
+                name=coureur, mode="lines+markers",
+                line=dict(color=COLORS.get(coureur, "#888"), width=2),
+                marker=dict(size=10),
+                hovertemplate=f"<b>{coureur}</b> · S%{{x}}<br>%{{y:.0f}} W<extra></extra>",
+            ))
+        fig.update_layout(**LAYOUT, height=350,
+                          xaxis=dict(**_AXIS, title="Séance", dtick=1),
+                          yaxis=dict(**_AXIS, title="Watts"))
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        st.subheader("Puissance max par séance")
+
+        fig2 = go.Figure()
+        for i, seance in enumerate(sorted(df["Séance"].unique())):
+            d = df[df["Séance"] == seance].dropna(subset=["Puissance_w"])
+            if d.empty:
+                continue
+            fig2.add_trace(go.Bar(
+                name=f"S{seance}",
+                x=d["Coureur"], y=d["Puissance_w"],
+                marker_color=[COLORS.get(c, "#888") for c in d["Coureur"]],
+                opacity=min(0.5 + 0.17 * i, 1.0),
+                text=[f"{int(v)}W" for v in d["Puissance_w"]],
+                textposition="outside", textfont=dict(color="white", size=10),
+            ))
+        fig2.update_layout(**LAYOUT, barmode="group", height=350,
+                           yaxis=dict(**_AXIS, title="Watts"))
+        st.plotly_chart(fig2, use_container_width=True)
+
+    st.divider()
+    col3, col4 = st.columns(2)
+
+    with col3:
+        st.subheader("FC moyenne Tour 2")
+        st.caption("Effort cardiovasculaire sur le lap rapide")
+
+        fig3 = go.Figure()
+        for coureur in coureurs_sel:
+            dc = df[df["Coureur"] == coureur].sort_values("Séance")
+            if dc.empty or dc["FC_moy"].isna().all():
+                continue
+            fig3.add_trace(go.Scatter(
+                x=dc["Séance"], y=dc["FC_moy"],
+                name=coureur, mode="lines+markers",
+                line=dict(color=COLORS.get(coureur, "#888"), width=2),
+                marker=dict(size=10),
+                hovertemplate=f"<b>{coureur}</b> · S%{{x}}<br>%{{y:.0f}} bpm<extra></extra>",
+            ))
+        fig3.update_layout(**LAYOUT, height=320,
+                           xaxis=dict(**_AXIS, title="Séance", dtick=1),
+                           yaxis=dict(**_AXIS, title="bpm"))
+        st.plotly_chart(fig3, use_container_width=True)
+
+    with col4:
+        st.subheader("Efficacité cardiovasculaire")
+        st.caption("Temps 400m / FC moy · plus bas = plus efficace à effort cardiaque égal")
+
+        df_eff = df.dropna(subset=["Temps400m_s", "FC_moy"]).copy()
+        df_eff["eff"] = df_eff["Temps400m_s"] / df_eff["FC_moy"]
+
+        fig4 = go.Figure()
+        for coureur in coureurs_sel:
+            dc = df_eff[df_eff["Coureur"] == coureur].sort_values("Séance")
+            if dc.empty:
+                continue
+            fig4.add_trace(go.Scatter(
+                x=dc["Séance"], y=dc["eff"],
+                name=coureur, mode="lines+markers",
+                line=dict(color=COLORS.get(coureur, "#888"), width=2),
+                marker=dict(size=10),
+                hovertemplate=f"<b>{coureur}</b> · S%{{x}}<br>%{{y:.3f}}<extra></extra>",
+            ))
+        fig4.update_layout(**LAYOUT, height=320,
+                           xaxis=dict(**_AXIS, title="Séance", dtick=1),
+                           yaxis=dict(**_AXIS, title="s/bpm"))
         st.plotly_chart(fig4, use_container_width=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  PAGE 3 — BIOMÉCANIQUE
+#  4 — FACE-À-TÊTE
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "Biomécanique":
-    st.title("Biomécanique & Effort")
-
-    RADAR = [
-        ("Vitesse",   "Allure_s",      False),
-        ("Endurance", "FC_moy",        False),
-        ("Cadence",   "Cadence_moy",   True),
-        ("Foulée",    "Foulée_moy",    True),
-        ("Puissance", "Puissance_moy", True),
-    ]
-    radar_ok = [(lbl, col, hib) for lbl, col, hib in RADAR
-                if col in df.columns and df[col].notna().any()]
-    categories = [r[0] for r in radar_ok] + [radar_ok[0][0]]
-
-    # ── Comparaison directe radar ──────────────────────────────────────────────
-    st.subheader("Comparaison directe")
-    st.caption("Comparez deux coureurs sur une séance donnée")
-
-    if len(coureurs_sel) < 2:
-        st.warning("Sélectionnez au moins 2 coureurs dans la sidebar.")
-    else:
-        col_a, col_b, col_s = st.columns([2, 2, 1])
-        with col_a:
-            bio_ca = st.selectbox("Coureur A", coureurs_sel, index=0, key="bio_ca")
-        with col_b:
-            bio_cb = st.selectbox("Coureur B", [c for c in coureurs_sel if c != bio_ca], index=0, key="bio_cb")
-        with col_s:
-            bio_seance = st.selectbox("Séance", sorted(df["Séance"].unique()), key="bio_seance")
-
-        da = df[(df["Coureur"] == bio_ca) & (df["Séance"] == bio_seance)]
-        db_ = df[(df["Coureur"] == bio_cb) & (df["Séance"] == bio_seance)]
-
-        if da.empty or db_.empty:
-            st.warning("Données manquantes pour un des coureurs sur cette séance.")
-        else:
-            ra_bio, rb_bio = da.iloc[0], db_.iloc[0]
-            fig_r_cmp = go.Figure()
-            for runner, row in [(bio_ca, ra_bio), (bio_cb, rb_bio)]:
-                vals = []
-                for _, col_name, hib in radar_ok:
-                    v = row.get(col_name)
-                    if pd.isna(v):
-                        vals.append(50.0)
-                        continue
-                    ref = df_all[col_name].dropna()
-                    mn, mx = ref.min(), ref.max()
-                    if mx == mn:
-                        vals.append(50.0)
-                    elif hib:
-                        vals.append((v - mn) / (mx - mn) * 100)
-                    else:
-                        vals.append((mx - v) / (mx - mn) * 100)
-                vals.append(vals[0])
-                color = COLORS.get(runner, "#888")
-                fig_r_cmp.add_trace(go.Scatterpolar(
-                    r=vals, theta=categories,
-                    name=runner,
-                    line=dict(color=color, width=2),
-                    fill="toself",
-                    fillcolor=color,
-                    opacity=0.35,
-                ))
-            fig_r_cmp.update_layout(
-                **LAYOUT,
-                polar=dict(
-                    bgcolor="#1a1a1a",
-                    radialaxis=dict(visible=True, range=[0, 100], tickcolor="#555",
-                                   gridcolor="#333", color="#888"),
-                    angularaxis=dict(tickcolor="#555", gridcolor="#333", color="#e0e0e0"),
-                ),
-                height=430,
-            )
-            st.plotly_chart(fig_r_cmp, use_container_width=True)
-
-    st.divider()
-    col1, col2 = st.columns(2)
-
-    # ── Scatter cadence vs allure ──────────────────────────────────────────────
-    with col1:
-        st.subheader("Cadence vs Allure")
-        st.caption("Cadence élevée = plus rapide ? · droite = tendance globale")
-
-        fig5 = go.Figure()
-        df5 = df.dropna(subset=["Cadence_moy", "Allure_s"])
-        for coureur in coureurs_sel:
-            dc = df5[df5["Coureur"] == coureur]
-            if dc.empty:
-                continue
-            fig5.add_trace(go.Scatter(
-                x=dc["Cadence_moy"], y=dc["Allure_s"],
-                name=coureur, mode="markers",
-                marker=dict(size=14, color=COLORS.get(coureur, "#888"),
-                            line=dict(width=2, color="#0d0d0d")),
-                customdata=list(zip(dc["Allure_str"], dc["Séance"])),
-                hovertemplate=f"<b>{coureur}</b> · S%{{customdata[1]}}<br>"
-                              f"Cadence : %{{x}} pas/min<br>Allure : %{{customdata[0]}}<extra></extra>",
-            ))
-        add_trendline(fig5, df5["Cadence_moy"], df5["Allure_s"])
-        fig5.update_layout(
-            **LAYOUT, height=320,
-            xaxis=dict(**_AXIS, title="Cadence (pas/min)"),
-            yaxis=dict(**_AXIS, autorange="reversed", title="Allure (s/km)"),
-        )
-        st.plotly_chart(fig5, use_container_width=True)
-
-    # ── Scatter foulée vs allure ───────────────────────────────────────────────
-    with col2:
-        st.subheader("Foulée vs Allure")
-        st.caption("Grande foulée = plus rapide ?")
-
-        fig6 = go.Figure()
-        df6 = df.dropna(subset=["Foulée_moy", "Allure_s"])
-        for coureur in coureurs_sel:
-            dc = df6[df6["Coureur"] == coureur]
-            if dc.empty:
-                continue
-            fig6.add_trace(go.Scatter(
-                x=dc["Foulée_moy"], y=dc["Allure_s"],
-                name=coureur, mode="markers",
-                marker=dict(size=14, color=COLORS.get(coureur, "#888"),
-                            line=dict(width=2, color="#0d0d0d")),
-                customdata=list(zip(dc["Allure_str"], dc["Séance"])),
-                hovertemplate=f"<b>{coureur}</b> · S%{{customdata[1]}}<br>"
-                              f"Foulée : %{{x}} m<br>Allure : %{{customdata[0]}}<extra></extra>",
-            ))
-        add_trendline(fig6, df6["Foulée_moy"], df6["Allure_s"])
-        fig6.update_layout(
-            **LAYOUT, height=320,
-            xaxis=dict(**_AXIS, title="Longueur de foulée (m)"),
-            yaxis=dict(**_AXIS, autorange="reversed", title="Allure (s/km)"),
-        )
-        st.plotly_chart(fig6, use_container_width=True)
-
-    col3, col4 = st.columns(2)
-
-    # ── Indice d'efficacité cardio ─────────────────────────────────────────────
-    with col3:
-        st.subheader("Efficacité cardiovasculaire")
-        st.caption("Allure ÷ FC moy (s/km/bpm) · plus bas = plus efficace")
-
-        df_eff = df.dropna(subset=["Allure_s", "FC_moy"]).copy()
-        df_eff["eff"] = df_eff["Allure_s"] / df_eff["FC_moy"]
-
-        fig7 = go.Figure()
-        for i, seance in enumerate(sorted(df_eff["Séance"].unique())):
-            d = df_eff[df_eff["Séance"] == seance]
-            fig7.add_trace(go.Bar(
-                name=f"Séance {seance}",
-                x=d["Coureur"], y=d["eff"],
-                marker_color=[COLORS.get(c, "#888") for c in d["Coureur"]],
-                opacity=0.55 + 0.25 * i,
-                text=[f"{v:.2f}" for v in d["eff"]],
-                textposition="outside",
-                textfont=dict(color="white", size=10),
-                hovertemplate="<b>%{x}</b><br>Indice : %{text}<extra></extra>",
-            ))
-        fig7.update_layout(**LAYOUT, barmode="group", height=320, yaxis_title="s/km/bpm")
-        st.plotly_chart(fig7, use_container_width=True)
-
-    # ── TE Aérobie ─────────────────────────────────────────────────────────────
-    with col4:
-        st.subheader("Training Effect aérobie")
-        st.caption("Qualité de l'effort Garmin · 0 = aucun effet · 5 = surcharge")
-
-        df_te = df.dropna(subset=["TE"])
-        fig8 = go.Figure()
-        for i, seance in enumerate(sorted(df_te["Séance"].unique())):
-            d = df_te[df_te["Séance"] == seance]
-            fig8.add_trace(go.Bar(
-                name=f"Séance {seance}",
-                x=d["Coureur"], y=d["TE"],
-                marker_color=[COLORS.get(c, "#888") for c in d["Coureur"]],
-                opacity=0.55 + 0.25 * i,
-                text=[f"{v:.1f}" for v in d["TE"]],
-                textposition="outside",
-                textfont=dict(color="white", size=10),
-            ))
-        fig8.add_hline(y=3, line=dict(color="#555", dash="dot", width=1),
-                       annotation_text="seuil 3", annotation_font_color="#888")
-        fig8.update_layout(
-            **LAYOUT, barmode="group", height=320,
-            yaxis=dict(**_AXIS, range=[0, 5.5], title="TE aérobie"),
-        )
-        st.plotly_chart(fig8, use_container_width=True)
-
-    # ── Calories corrigées ─────────────────────────────────────────────────────
-    st.divider()
-    st.subheader("Économie de course — Calories/km (corrigées)")
-    st.caption(
-        "Les données Garmin sont calibrées sur le profil d'Arthur (70 kg). "
-        "Les calories sont corrigées par le poids réel de chaque coureur. "
-        "Plus bas = plus économe énergétiquement."
-    )
-
-    # Poids réels des coureurs
-    POIDS = {"Arthur": 70, "Khalil": 80, "Adrien": 64, "Nathan": 76}
-    POIDS_REF = 70  # poids du profil Garmin (Arthur)
-
-    df_cal = df.dropna(subset=["Calories", "Distance"]).copy()
-    df_cal = df_cal[df_cal["Distance"] > 0].copy()
-    df_cal["facteur"] = df_cal["Coureur"].map(lambda c: POIDS.get(c, POIDS_REF) / POIDS_REF)
-    df_cal["cal_km_brut"]    = df_cal["Calories"] / df_cal["Distance"]
-    df_cal["cal_km_corrige"] = df_cal["cal_km_brut"] * df_cal["facteur"]
-
-    col_cal1, col_cal2 = st.columns(2)
-
-    with col_cal1:
-        st.caption("Calories brutes/km (données Garmin telles quelles)")
-        fig_cb = go.Figure()
-        for i, seance in enumerate(sorted(df_cal["Séance"].unique())):
-            d = df_cal[df_cal["Séance"] == seance]
-            fig_cb.add_trace(go.Bar(
-                name=f"Séance {seance}",
-                x=d["Coureur"], y=d["cal_km_brut"],
-                marker_color=[COLORS.get(c, "#888") for c in d["Coureur"]],
-                opacity=0.55 + 0.25 * i,
-                text=[f"{v:.0f}" for v in d["cal_km_brut"]],
-                textposition="outside",
-                textfont=dict(color="white", size=10),
-                hovertemplate="<b>%{x}</b><br>%{text} kcal/km<extra></extra>",
-            ))
-        fig_cb.update_layout(**LAYOUT, barmode="group", height=320, yaxis_title="kcal/km")
-        st.plotly_chart(fig_cb, use_container_width=True)
-
-    with col_cal2:
-        st.caption("Calories corrigées/km · facteur = poids réel ÷ 70 kg (profil Garmin)")
-        fig_cc = go.Figure()
-        for i, seance in enumerate(sorted(df_cal["Séance"].unique())):
-            d = df_cal[df_cal["Séance"] == seance]
-            fig_cc.add_trace(go.Bar(
-                name=f"Séance {seance}",
-                x=d["Coureur"], y=d["cal_km_corrige"],
-                marker_color=[COLORS.get(c, "#888") for c in d["Coureur"]],
-                opacity=0.55 + 0.25 * i,
-                text=[f"{v:.0f}" for v in d["cal_km_corrige"]],
-                textposition="outside",
-                textfont=dict(color="white", size=10),
-                hovertemplate="<b>%{x}</b><br>%{text} kcal/km (corrigé)<extra></extra>",
-            ))
-        fig_cc.update_layout(**LAYOUT, barmode="group", height=320, yaxis_title="kcal/km")
-        st.plotly_chart(fig_cc, use_container_width=True)
-
-    st.info(
-        "**Facteurs de correction appliqués :** "
-        "Adrien ×0.91 · Arthur ×1.00 · Khalil ×1.14 · Nathan ×1.09 · "
-        "La puissance et le TE aérobie restent biaisés (profil fitness d'Arthur uniquement)."
-    )
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  PAGE 4 — MÉTÉO & CORRÉLATIONS
-# ══════════════════════════════════════════════════════════════════════════════
-elif page == "Météo & Corrélations":
-    st.title("Météo & Corrélations")
-
-    has_meteo = "Météo_Temp" in df.columns and df["Météo_Temp"].notna().any()
-
-    if not has_meteo:
-        st.info("""
-        **Données météo non disponibles en mode CSV.**
-
-        Elles apparaîtront automatiquement une fois la base PostgreSQL alimentée
-        via `ingest_meteo.py`.
-
-        Les graphiques de cette page répondent directement à la problématique :
-        *"Les conditions environnementales impactent-elles la performance ?"*
-        """)
-        st.stop()
-
-    # ── Cards météo par séance ─────────────────────────────────────────────────
-    st.subheader("Conditions météo par séance")
-    df_mc = df.drop_duplicates("Séance").sort_values("Séance")
-
-    mcols = st.columns(len(df_mc))
-    for i, (_, row) in enumerate(df_mc.iterrows()):
-        with mcols[i]:
-            pluie = f"{row.get('Météo_Precipitation', 0) or 0:.1f} mm"
-            st.markdown(f"""
-            <div style="border:1px solid #333; border-radius:8px; padding:14px;
-                        background:#1a1a1a; text-align:center;">
-                <h4 style="color:#e0e0e0; margin:0 0 8px 0;">Séance {int(row['Séance'])}</h4>
-                <p style="font-size:2em; margin:4px 0;">🌡️</p>
-                <p style="margin:2px 0; color:#fff; font-size:1.3em;"><b>{row['Météo_Temp']:.1f}°C</b></p>
-                <p style="margin:2px 0; color:#aaa;">Ressenti {row.get('Météo_TempRessentie', row['Météo_Temp']):.1f}°C</p>
-                <p style="margin:4px 0; color:#aaa;">💧 {row.get('Météo_Humidite', 0):.0f}% humidité</p>
-                <p style="margin:2px 0; color:#aaa;">💨 {row.get('Météo_Vent', 0):.1f} km/h</p>
-                <p style="margin:2px 0; color:#aaa;">🌧 {pluie}</p>
-            </div>
-            """, unsafe_allow_html=True)
-
-    st.divider()
-    col1, col2 = st.columns(2)
-
-    # ── Scatter température vs allure ──────────────────────────────────────────
-    with col1:
-        st.subheader("Température vs Allure")
-        st.caption("Répond directement à la problématique · droite = tendance toutes données confondues")
-
-        df9 = df.dropna(subset=["Météo_Temp", "Allure_s"])
-        fig9 = go.Figure()
-        for coureur in coureurs_sel:
-            dc = df9[df9["Coureur"] == coureur]
-            if dc.empty:
-                continue
-            fig9.add_trace(go.Scatter(
-                x=dc["Météo_Temp"], y=dc["Allure_s"],
-                name=coureur, mode="markers",
-                marker=dict(size=16, color=COLORS.get(coureur, "#888"),
-                            line=dict(width=2, color="#0d0d0d")),
-                customdata=list(zip(dc["Allure_str"], dc["Séance"])),
-                hovertemplate=f"<b>{coureur}</b> · S%{{customdata[1]}}<br>"
-                              f"Temp : %{{x}}°C<br>Allure : %{{customdata[0]}}<extra></extra>",
-            ))
-        add_trendline(fig9, df9["Météo_Temp"], df9["Allure_s"])
-        fig9.update_layout(
-            **LAYOUT, height=360,
-            xaxis=dict(**_AXIS, title="Température (°C)"),
-            yaxis=dict(**_AXIS, autorange="reversed", title="Allure (s/km)"),
-        )
-        st.plotly_chart(fig9, use_container_width=True)
-
-    # ── Scatter humidité vs FC ─────────────────────────────────────────────────
-    with col2:
-        st.subheader("Humidité vs Fréquence Cardiaque")
-        st.caption("Chaleur humide → FC plus élevée ?")
-
-        df10 = df.dropna(subset=["Météo_Humidite", "FC_moy"])
-        fig10 = go.Figure()
-        for coureur in coureurs_sel:
-            dc = df10[df10["Coureur"] == coureur]
-            if dc.empty:
-                continue
-            fig10.add_trace(go.Scatter(
-                x=dc["Météo_Humidite"], y=dc["FC_moy"],
-                name=coureur, mode="markers",
-                marker=dict(size=16, color=COLORS.get(coureur, "#888"),
-                            line=dict(width=2, color="#0d0d0d")),
-                customdata=dc["Séance"],
-                hovertemplate=f"<b>{coureur}</b> · S%{{customdata}}<br>"
-                              f"Humidité : %{{x}}%<br>FC : %{{y}} bpm<extra></extra>",
-            ))
-        add_trendline(fig10, df10["Météo_Humidite"], df10["FC_moy"])
-        fig10.update_layout(
-            **LAYOUT, height=360,
-            xaxis=dict(**_AXIS, title="Humidité (%)"),
-            yaxis=dict(**_AXIS, title="FC moyenne (bpm)"),
-        )
-        st.plotly_chart(fig10, use_container_width=True)
-
-    # ── Température & vent par séance ──────────────────────────────────────────
-    col3, col4 = st.columns(2)
-
-    with col3:
-        st.subheader("Température par séance")
-        st.caption("Réelle vs ressentie")
-
-        df_tc = df.drop_duplicates("Séance").sort_values("Séance").dropna(subset=["Météo_Temp"])
-        fig11 = go.Figure()
-        fig11.add_trace(go.Bar(
-            name="Temp. réelle",
-            x=df_tc["Séance"].astype(str),
-            y=df_tc["Météo_Temp"],
-            marker_color="#5588FF",
-            text=[f"{v:.1f}°C" for v in df_tc["Météo_Temp"]],
-            textposition="outside", textfont=dict(color="white"),
-        ))
-        if "Météo_TempRessentie" in df_tc.columns:
-            fig11.add_trace(go.Bar(
-                name="Ressenti",
-                x=df_tc["Séance"].astype(str),
-                y=df_tc["Météo_TempRessentie"],
-                marker_color="#FF8844",
-                text=[f"{v:.1f}°C" for v in df_tc["Météo_TempRessentie"]],
-                textposition="outside", textfont=dict(color="white"),
-            ))
-        fig11.update_layout(**LAYOUT, barmode="group", height=320, yaxis_title="°C")
-        st.plotly_chart(fig11, use_container_width=True)
-
-    with col4:
-        st.subheader("Humidité & Vent")
-        st.caption("Humidité (barres) · vent (ligne)")
-
-        df_hw = df.drop_duplicates("Séance").sort_values("Séance").dropna(subset=["Météo_Humidite"])
-        fig12 = go.Figure()
-        fig12.add_trace(go.Bar(
-            name="Humidité (%)",
-            x=df_hw["Séance"].astype(str),
-            y=df_hw["Météo_Humidite"],
-            marker_color="#44CCAA",
-            yaxis="y",
-        ))
-        if "Météo_Vent" in df_hw.columns:
-            fig12.add_trace(go.Scatter(
-                name="Vent (km/h)",
-                x=df_hw["Séance"].astype(str),
-                y=df_hw["Météo_Vent"],
-                mode="markers+lines",
-                marker=dict(size=10, color="white"),
-                line=dict(color="#aaa", width=1.5),
-                yaxis="y2",
-            ))
-        fig12.update_layout(
-            **LAYOUT, height=320,
-            yaxis=dict(title="Humidité (%)", gridcolor="#2a2a2a"),
-            yaxis2=dict(title="Vent (km/h)", overlaying="y", side="right"),
-        )
-        st.plotly_chart(fig12, use_container_width=True)
-
-    # ── Heatmap corrélations ───────────────────────────────────────────────────
-    st.divider()
-    st.subheader("Matrice de corrélations")
-    st.caption("Pearson · rouge = corrélation positive · bleu = inverse · blanc = indépendant")
-
-    corr_candidates = ["Allure_s", "FC_moy", "Cadence_moy", "Foulée_moy",
-                       "Puissance_moy", "Météo_Temp", "Météo_Humidite", "Météo_Vent"]
-    corr_cols = [c for c in corr_candidates if c in df.columns and df[c].notna().sum() >= 3]
-
-    if len(corr_cols) >= 3 and len(df) >= 4:
-        corr = df[corr_cols].corr()
-        labels_map = {
-            "Allure_s": "Allure", "FC_moy": "FC moy", "Cadence_moy": "Cadence",
-            "Foulée_moy": "Foulée", "Puissance_moy": "Puissance",
-            "Météo_Temp": "Température", "Météo_Humidite": "Humidité", "Météo_Vent": "Vent",
-        }
-        corr.index = [labels_map.get(c, c) for c in corr.index]
-        corr.columns = [labels_map.get(c, c) for c in corr.columns]
-
-        fig13 = go.Figure(go.Heatmap(
-            z=corr.values,
-            x=corr.columns.tolist(),
-            y=corr.index.tolist(),
-            text=[[f"{v:.2f}" for v in row] for row in corr.values],
-            texttemplate="%{text}",
-            textfont=dict(color="white", size=11),
-            colorscale="RdBu", reversescale=True,
-            zmin=-1, zmax=1, showscale=True,
-            hovertemplate="%{y} × %{x}<br>r = %{text}<extra></extra>",
-        ))
-        fig13.update_layout(**LAYOUT, height=440)
-        st.plotly_chart(fig13, use_container_width=True)
-    else:
-        st.info("Pas assez de données pour la matrice. Nécessite au moins 4 lignes avec données météo.")
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  PAGE 5 — TÊTE-À-TÊTE
-# ══════════════════════════════════════════════════════════════════════════════
-elif page == "Tête-à-tête":
-    st.title("Tête-à-tête")
-    st.caption("Comparez deux coureurs sur une séance donnée")
+elif page == "4 · Face-à-tête":
+    st.title("Face-à-tête — Comparaison 2 coureurs")
 
     if len(coureurs_sel) < 2:
         st.warning("Sélectionnez au moins 2 coureurs dans la sidebar.")
         st.stop()
 
-    col_a, col_b, col_s = st.columns([2, 2, 1])
+    col_a, col_b = st.columns(2)
     with col_a:
         ca = st.selectbox("Coureur A", coureurs_sel, index=0)
     with col_b:
         cb = st.selectbox("Coureur B", [c for c in coureurs_sel if c != ca], index=0)
-    with col_s:
-        seance_tat = st.selectbox("Séance", sorted(df["Séance"].unique()))
 
-    da = df[(df["Coureur"] == ca) & (df["Séance"] == seance_tat)]
-    db_ = df[(df["Coureur"] == cb) & (df["Séance"] == seance_tat)]
+    dca = df[df["Coureur"] == ca].sort_values("Séance")
+    dcb = df[df["Coureur"] == cb].sort_values("Séance")
 
-    if da.empty or db_.empty:
-        st.warning("Données manquantes pour un des coureurs sur cette séance.")
-        st.stop()
+    col1, col2 = st.columns(2)
 
-    ra, rb = da.iloc[0], db_.iloc[0]
+    with col1:
+        st.subheader("Temps 400m séance par séance")
+        fig = go.Figure()
+        for coureur, dc in [(ca, dca), (cb, dcb)]:
+            fig.add_trace(go.Scatter(
+                x=dc["Séance"], y=dc["Temps400m_s"],
+                name=coureur, mode="lines+markers",
+                line=dict(color=COLORS.get(coureur, "#888"), width=3),
+                marker=dict(size=12),
+                text=dc["Temps400m_str"],
+                hovertemplate=f"<b>{coureur}</b> · S%{{x}}<br>%{{text}}<extra></extra>",
+            ))
+        fig.update_layout(**LAYOUT, height=360,
+                          xaxis=dict(**_AXIS, title="Séance", dtick=1),
+                          yaxis=dict(**_AXIS, autorange="reversed", title="secondes"))
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        st.subheader("Métriques clés — tableau comparatif")
+
+        metrics = ["Temps400m_str", "FC_moy", "FC_max", "Cadence_spm", "Puissance_w"]
+        labels  = ["Temps 400m", "FC moy (bpm)", "FC max (bpm)", "Cadence (spm)", "Puissance (W)"]
+
+        rows = []
+        for s in sorted(df["Séance"].unique()):
+            ra = dca[dca["Séance"] == s].iloc[0] if not dca[dca["Séance"] == s].empty else None
+            rb = dcb[dcb["Séance"] == s].iloc[0] if not dcb[dcb["Séance"] == s].empty else None
+            for lbl, col_name in zip(labels, metrics):
+                va = ra[col_name] if ra is not None else None
+                vb = rb[col_name] if rb is not None else None
+                def fmt(v):
+                    if v is None or (isinstance(v, float) and pd.isna(v)):
+                        return "N/A"
+                    if isinstance(v, float):
+                        return f"{v:.0f}"
+                    return str(v)
+                rows.append({"Séance": f"S{s}", "Métrique": lbl, ca: fmt(va), cb: fmt(vb)})
+
+        st.dataframe(pd.DataFrame(rows).set_index(["Séance", "Métrique"]),
+                     use_container_width=True, height=420)
+
     st.divider()
+    st.subheader("Radar — profil global (toutes séances)")
 
-    # ── Comparaison radar ──────────────────────────────────────────────────────
-    RADAR2 = [
-        ("Vitesse",   "Allure_s",      False),
-        ("Endurance", "FC_moy",        False),
-        ("Cadence",   "Cadence_moy",   True),
-        ("Foulée",    "Foulée_moy",    True),
-        ("Puissance", "Puissance_moy", True),
+    RADAR_COLS = [
+        ("Vitesse",   "Temps400m_s",  False),
+        ("FC effort", "FC_moy",       False),
+        ("Puissance", "Puissance_w",  True),
+        ("Cadence",   "Cadence_spm",  True),
+        ("Régularité","Allure_s",     False),
     ]
-    radar2_ok = [(lbl, col, hib) for lbl, col, hib in RADAR2
-                 if col in df.columns and df[col].notna().any()]
-    cats2 = [r[0] for r in radar2_ok] + [radar2_ok[0][0]]
+    cats = [r[0] for r in RADAR_COLS] + [RADAR_COLS[0][0]]
 
-    fig_r2 = go.Figure()
-    for runner, row in [(ca, ra), (cb, rb)]:
+    fig_r = go.Figure()
+    for coureur, dc in [(ca, dca), (cb, dcb)]:
         vals = []
-        for _, col_name, hib in radar2_ok:
-            v = row.get(col_name)
-            if pd.isna(v):
-                vals.append(50.0)
-                continue
+        for _, col_name, hib in RADAR_COLS:
+            v = dc[col_name].mean()
             ref = df_all[col_name].dropna()
             mn, mx = ref.min(), ref.max()
-            vals.append(50.0 if mx == mn else ((v - mn) / (mx - mn) * 100 if hib else (mx - v) / (mx - mn) * 100))
+            if mx == mn:
+                vals.append(50.0)
+            elif hib:
+                vals.append((v - mn) / (mx - mn) * 100)
+            else:
+                vals.append((mx - v) / (mx - mn) * 100)
         vals.append(vals[0])
-        color = COLORS.get(runner, "#888")
-        fig_r2.add_trace(go.Scatterpolar(
-            r=vals, theta=cats2, name=runner,
+        color = COLORS.get(coureur, "#888")
+        fig_r.add_trace(go.Scatterpolar(
+            r=vals, theta=cats, name=coureur,
             line=dict(color=color, width=2),
-            fill="toself", fillcolor=color, opacity=0.2,
+            fill="toself", fillcolor=color, opacity=0.3,
         ))
-    fig_r2.update_layout(
-        **LAYOUT,
+    fig_r.update_layout(
+        **LAYOUT, height=420,
         polar=dict(
             bgcolor="#1a1a1a",
-            radialaxis=dict(visible=True, range=[0, 100], tickcolor="#555",
-                            gridcolor="#333", color="#888"),
+            radialaxis=dict(visible=True, range=[0, 100],
+                            tickcolor="#555", gridcolor="#333", color="#888"),
             angularaxis=dict(tickcolor="#555", gridcolor="#333", color="#e0e0e0"),
         ),
-        height=380,
     )
-    st.plotly_chart(fig_r2, use_container_width=True)
-
-    # ── Barres comparatives ────────────────────────────────────────────────────
-    st.subheader("Comparaison métrique par métrique")
-
-    METRIQUES = [
-        ("Allure moy",   "Allure_s",      "s/km",    False, lambda v: pace_str(v)),
-        ("Sprint",       "Meilleure_allure_s", "s/km", False, lambda v: pace_str(v)),
-        ("FC moy",       "FC_moy",         "bpm",    False, lambda v: f"{int(v)} bpm"),
-        ("FC max",       "FC_max",          "bpm",   False, lambda v: f"{int(v)} bpm"),
-        ("Cadence",      "Cadence_moy",    "pas/min", True,  lambda v: f"{int(v)} pas/min"),
-        ("Foulée",       "Foulée_moy",     "m",       True,  lambda v: f"{v:.2f} m"),
-        ("Puissance",    "Puissance_moy",  "W",       True,  lambda v: f"{int(v)} W"),
-        ("TE aérobie",   "TE",             "",        True,  lambda v: f"{v:.1f}"),
-        ("Calories/km",  None,             "kcal/km", False, None),
-    ]
-
-    for label, col_name, unit, hib, fmt in METRIQUES:
-        if col_name is None:
-            # Calories normalisées
-            if pd.notna(ra.get("Calories")) and ra.get("Distance", 0) > 0:
-                va = ra["Calories"] / ra["Distance"]
-                vb = rb["Calories"] / rb["Distance"]
-                fmt_fn = lambda v: f"{v:.0f} kcal/km"
-            else:
-                continue
-        else:
-            va, vb = ra.get(col_name), rb.get(col_name)
-            fmt_fn = fmt
-            if pd.isna(va) or pd.isna(vb):
-                continue
-
-        winner = ca if (va < vb) != hib else cb
-        color_a = COLORS.get(ca, "#888")
-        color_b = COLORS.get(cb, "#888")
-
-        c1, c2 = st.columns([1, 6])
-        with c1:
-            st.markdown(
-                f"<p style='margin:0; color:#888; font-family:monospace; font-size:0.85em;'>{label}</p>"
-                f"<p style='margin:0; color:{COLORS.get(winner,'#fff')}; font-size:0.75em;'>🏆 {winner}</p>",
-                unsafe_allow_html=True
-            )
-        with c2:
-            fig_tat = go.Figure()
-            fig_tat.add_trace(go.Bar(
-                x=[va], y=[ca], orientation="h",
-                marker_color=color_a,
-                text=[fmt_fn(va)], textposition="inside",
-                textfont=dict(color="white", size=11),
-                showlegend=False,
-                hoverinfo="skip",
-            ))
-            fig_tat.add_trace(go.Bar(
-                x=[vb], y=[cb], orientation="h",
-                marker_color=color_b,
-                text=[fmt_fn(vb)], textposition="inside",
-                textfont=dict(color="white", size=11),
-                showlegend=False,
-                hoverinfo="skip",
-            ))
-            x_max = max(va, vb) * 1.25
-            fig_tat.update_layout(
-                **{k: v for k, v in LAYOUT.items() if k != "margin"},
-                barmode="group", height=90,
-                margin=dict(t=2, b=2, l=5, r=5),
-                xaxis=dict(range=[0, x_max] if hib else [x_max, 0],
-                           showgrid=False, showticklabels=False),
-                yaxis=dict(showgrid=False, tickfont=dict(color="white", size=11)),
-            )
-            st.plotly_chart(fig_tat, use_container_width=True)
+    st.plotly_chart(fig_r, use_container_width=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  PAGE 6 — CONDITIONS & CONTEXTE
+#  5 — PROFIL DE VITESSE
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "Conditions & Contexte":
-    CONDITIONS_FILE = Path(__file__).parent.parent / "data" / "conditions.json"
-    CONDITIONS_FILE.parent.mkdir(exist_ok=True)
+elif page == "5 · Profil de vitesse":
+    st.title("Profil de vitesse instantanée — Tour 2")
+    st.caption("Courbe m/s second-par-second sur le lap d'effort maximal")
 
-    def load_conditions() -> list[dict]:
-        if CONDITIONS_FILE.exists():
-            return json.loads(CONDITIONS_FILE.read_text(encoding="utf-8"))
-        return []
+    col_s, col_x = st.columns([2, 3])
+    with col_s:
+        seance_v = st.selectbox("Séance", sorted(df["Séance"].unique()))
+    with col_x:
+        axe = st.radio("Axe X", ["Temps (s)", "Distance (m)"], horizontal=True)
 
-    def save_conditions(data: list[dict]):
-        CONDITIONS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    coureurs_v = [c for c in coureurs_sel if
+                  (df[(df["Coureur"] == c) & (df["Séance"] == seance_v)].shape[0] > 0)]
 
-    st.title("Conditions & Contexte")
-    st.caption(
-        "Saisie manuelle des conditions physiologiques de chaque coureur avant chaque séance. "
-        "Ces données permettent d'identifier les biais dans l'analyse des performances."
-    )
+    fig = go.Figure()
+    for coureur in coureurs_v:
+        seg = get_fit(coureur, seance_v, "tour2")
+        if seg is None or seg.empty or "enhanced_speed" not in seg.columns:
+            continue
+        seg_c = seg.dropna(subset=["enhanced_speed"])
+        x = seg_c["t_rel"] if axe == "Temps (s)" else seg_c["dist_rel"]
+        # Lissage léger (rolling 3s)
+        y = seg_c["enhanced_speed"].rolling(3, center=True, min_periods=1).mean()
+        fig.add_trace(go.Scatter(
+            x=x, y=y, name=coureur,
+            mode="lines",
+            line=dict(color=COLORS.get(coureur, "#888"), width=2.5),
+            hovertemplate=f"<b>{coureur}</b><br>%{{x:.0f}} · %{{y:.2f}} m/s<extra></extra>",
+        ))
 
-    # ── Formulaire de saisie ───────────────────────────────────────────────────
-    st.subheader("Saisir les conditions d'une séance")
-
-    with st.form("form_conditions"):
-        fc1, fc2, fc3 = st.columns(3)
-        with fc1:
-            form_coureur = st.selectbox("Coureur", sorted(COLORS.keys()))
-        with fc2:
-            form_seance = st.selectbox("Séance", sorted(df_all["Séance"].unique()))
-        with fc3:
-            form_etat = st.slider("État général (1 = mauvais · 5 = excellent)", 1, 5, 3)
-
-        fc4, fc5, fc6 = st.columns(3)
-        with fc4:
-            form_sommeil = st.number_input("Heures de sommeil", 0.0, 12.0, 7.0, step=0.5)
-        with fc5:
-            form_repas = st.number_input("Heures depuis dernier repas", 0.0, 24.0, 2.0, step=0.5)
-        with fc6:
-            form_jeun = st.checkbox("À jeun")
-
-        form_courbatures = st.checkbox("Courbatures / douleurs")
-        form_notes = st.text_area("Notes libres (stress, blessure, météo perçue...)", height=80)
-
-        submitted = st.form_submit_button("Enregistrer")
-
-    if submitted:
-        conditions = load_conditions()
-        # Mise à jour si existe déjà, sinon ajout
-        existing = next((c for c in conditions
-                         if c["coureur"] == form_coureur and c["seance"] == int(form_seance)), None)
-        entry = {
-            "coureur":        form_coureur,
-            "seance":         int(form_seance),
-            "a_jeun":         form_jeun,
-            "heures_sommeil": form_sommeil,
-            "etat_general":   form_etat,
-            "courbatures":    form_courbatures,
-            "dernier_repas_h": form_repas,
-            "notes":          form_notes.strip(),
-        }
-        if existing:
-            conditions = [e if not (e["coureur"] == form_coureur and e["seance"] == int(form_seance))
-                          else entry for e in conditions]
-            st.success(f"Conditions de {form_coureur} · Séance {form_seance} mises à jour.")
-        else:
-            conditions.append(entry)
-            st.success(f"Conditions de {form_coureur} · Séance {form_seance} enregistrées.")
-        save_conditions(conditions)
-
-    # ── Tableau des conditions saisies ─────────────────────────────────────────
-    st.divider()
-    st.subheader("Conditions enregistrées")
-
-    conditions = load_conditions()
-    if not conditions:
-        st.info("Aucune condition saisie pour l'instant. Utilisez le formulaire ci-dessus.")
+    if fig.data:
+        xlabel = "Temps (s)" if axe == "Temps (s)" else "Distance (m)"
+        fig.update_layout(**LAYOUT, height=420,
+                          xaxis=dict(**_AXIS, title=xlabel),
+                          yaxis=dict(**_AXIS, title="Vitesse (m/s)"))
+        st.plotly_chart(fig, use_container_width=True)
     else:
-        df_cond = pd.DataFrame(conditions).sort_values(["seance", "coureur"])
+        st.info("Données FIT non disponibles pour cette sélection.")
 
-        # Mise en forme lisible
-        df_display = df_cond.copy()
-        df_display["a_jeun"] = df_display["a_jeun"].map({True: "✅ Oui", False: "❌ Non"})
-        df_display["courbatures"] = df_display["courbatures"].map({True: "⚠️ Oui", False: "Non"})
-        df_display["etat_general"] = df_display["etat_general"].apply(lambda v: "⭐" * int(v))
-        df_display = df_display.rename(columns={
-            "coureur": "Coureur", "seance": "Séance",
-            "a_jeun": "À jeun", "heures_sommeil": "Sommeil (h)",
-            "etat_general": "État", "courbatures": "Courbatures",
-            "dernier_repas_h": "Dernier repas (h)", "notes": "Notes",
-        })
-        st.dataframe(df_display.set_index("Coureur"), use_container_width=True)
-
-        # ── Suppression ───────────────────────────────────────────────────────
-        st.caption("Supprimer une entrée :")
-        del_col1, del_col2, del_col3 = st.columns([2, 2, 1])
-        with del_col1:
-            del_coureur = st.selectbox("Coureur", [c["coureur"] for c in conditions],
-                                       key="del_coureur")
-        with del_col2:
-            del_seances = [c["seance"] for c in conditions if c["coureur"] == del_coureur]
-            del_seance = st.selectbox("Séance", del_seances, key="del_seance")
-        with del_col3:
-            st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("🗑 Supprimer"):
-                conditions = [c for c in conditions
-                              if not (c["coureur"] == del_coureur and c["seance"] == del_seance)]
-                save_conditions(conditions)
-                st.success(f"Entrée supprimée : {del_coureur} · Séance {del_seance}")
-                st.rerun()
-
-    # ── Visualisation état général ─────────────────────────────────────────────
-    if conditions and len(conditions) >= 2:
-        st.divider()
-        st.subheader("État général par coureur par séance")
-        st.caption("Permet de contextualiser les performances — un coureur en mauvais état est-il moins performant ?")
-
-        df_cv = pd.DataFrame(conditions)
-        df_cv["etat_num"] = df_cv["etat_general"].astype(float)
-
-        fig_cond = go.Figure()
-        for coureur in sorted(df_cv["coureur"].unique()):
-            dc = df_cv[df_cv["coureur"] == coureur].sort_values("seance")
-            fig_cond.add_trace(go.Scatter(
-                x=dc["seance"], y=dc["etat_num"],
-                name=coureur, mode="lines+markers",
-                line=dict(color=COLORS.get(coureur, "#888"), width=2),
-                marker=dict(size=12, color=COLORS.get(coureur, "#888"),
-                            line=dict(width=2, color="#0d0d0d")),
-                hovertemplate="<b>%{fullData.name}</b> · S%{x}<br>État : %{y}/5<extra></extra>",
-            ))
-        fig_cond.add_hrect(y0=1, y1=2.5, fillcolor="#B71C1C", opacity=0.08, line_width=0)
-        fig_cond.add_hrect(y0=3.5, y1=5, fillcolor="#1B5E20", opacity=0.08, line_width=0)
-        fig_cond.update_layout(
-            **LAYOUT, height=320,
-            xaxis=dict(**_AXIS, title="Séance", dtick=1),
-            yaxis=dict(**_AXIS, range=[0.5, 5.5], title="État général", dtick=1),
-        )
-        st.plotly_chart(fig_cond, use_container_width=True)
-
-        # ── Scatter état vs allure ─────────────────────────────────────────────
-        st.subheader("État général vs Allure")
-        st.caption("Un mauvais état se traduit-il par une allure plus lente ?")
-
-        df_merge = df_cv.merge(
-            df_all[["Coureur", "Séance", "Allure_s", "Allure_str"]],
-            left_on=["coureur", "seance"], right_on=["Coureur", "Séance"], how="inner"
-        )
-        if not df_merge.empty:
-            fig_ea = go.Figure()
-            for coureur in sorted(df_merge["coureur"].unique()):
-                dc = df_merge[df_merge["coureur"] == coureur]
-                fig_ea.add_trace(go.Scatter(
-                    x=dc["etat_num"], y=dc["Allure_s"],
-                    name=coureur, mode="markers",
-                    marker=dict(size=14, color=COLORS.get(coureur, "#888"),
-                                line=dict(width=2, color="#0d0d0d")),
-                    customdata=list(zip(dc["Allure_str"], dc["seance"])),
-                    hovertemplate="<b>%{fullData.name}</b> · S%{customdata[1]}<br>"
-                                  "État : %{x}/5<br>Allure : %{customdata[0]}<extra></extra>",
-                ))
-            add_trendline(fig_ea, df_merge["etat_num"], df_merge["Allure_s"])
-            fig_ea.update_layout(
-                **LAYOUT, height=320,
-                xaxis=dict(**_AXIS, title="État général (1-5)", dtick=1),
-                yaxis=dict(**_AXIS, autorange="reversed", title="Allure (s/km)"),
-            )
-            st.plotly_chart(fig_ea, use_container_width=True)
-
-    # ── Note sur les biais ─────────────────────────────────────────────────────
     st.divider()
-    st.subheader("Biais identifiés")
-    st.markdown("""
-| Biais | Impact | Correction appliquée |
-|---|---|---|
-| Profil Garmin unique (Arthur, 70 kg) | Calories, puissance, TE biaisés | ✅ Calories corrigées par poids réel |
-| À jeun vs pas à jeun | FC plus élevée, énergie réduite | ✅ Variable collectée ici |
-| Heures de sommeil | Récupération, performance | ✅ Variable collectée ici |
-| GPS précision ~3-5m | Distance peut varier de 1-2% | ❌ Non corrigeable |
-| Métriques moyennées 3 tours | Mélange effort modéré + maximal + récup | ❌ Splits non disponibles |
-| Apprentissage du parcours | Amélioration S1→S2 non due à la condition physique | ⚠️ À mentionner en note critique |
-| Niveaux physiques hétérogènes | Arthur (3:31) vs Khalil (6:13) difficilement comparables en absolu | ✅ % progression neutralise ça |
-    """)
+    st.subheader("Vitesse max instantanée — comparaison")
+    vmax_rows = []
+    for coureur in coureurs_sel:
+        for s in seances_sel:
+            seg = get_fit(coureur, s, "tour2")
+            if seg is None or "enhanced_speed" not in seg.columns:
+                continue
+            vmax = seg["enhanced_speed"].max()
+            if pd.notna(vmax):
+                vmax_rows.append({"Coureur": coureur, "Séance": s,
+                                  "Vmax (m/s)": round(vmax, 2),
+                                  "Vmax (km/h)": round(vmax * 3.6, 1)})
+    if vmax_rows:
+        st.dataframe(pd.DataFrame(vmax_rows).sort_values(["Séance", "Vmax (m/s)"],
+                     ascending=[True, False]), use_container_width=True)
 
 
-# ── Footer ─────────────────────────────────────────────────────────────────────
-st.divider()
-st.caption("SAÉ Data Pipeline · BUT Informatique 2A · IUT Reims-Châlons-Charleville · 2025-2026")
+# ══════════════════════════════════════════════════════════════════════════════
+#  6 — ACCÉLÉRATIONS
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "6 · Accélérations":
+    st.title("Analyse des accélérations — Tour 2")
+    st.caption("Dérivée de la vitesse (m/s²) · positif = accélération · négatif = ralentissement")
+
+    seance_a = st.selectbox("Séance", sorted(df["Séance"].unique()))
+
+    fig = go.Figure()
+    for coureur in coureurs_sel:
+        seg = get_fit(coureur, seance_a, "tour2")
+        if seg is None or "enhanced_speed" not in seg.columns:
+            continue
+        seg_c = seg.dropna(subset=["enhanced_speed"]).copy()
+        if len(seg_c) < 4:
+            continue
+        v = seg_c["enhanced_speed"].rolling(3, center=True, min_periods=1).mean()
+        accel = v.diff() / seg_c["t_rel"].diff().replace(0, np.nan)
+        accel = accel.rolling(3, center=True, min_periods=1).mean()
+        fig.add_trace(go.Scatter(
+            x=seg_c["t_rel"], y=accel,
+            name=coureur, mode="lines",
+            line=dict(color=COLORS.get(coureur, "#888"), width=2),
+            hovertemplate=f"<b>{coureur}</b><br>t=%{{x:.0f}}s · a=%{{y:.3f}} m/s²<extra></extra>",
+        ))
+
+    if fig.data:
+        fig.add_hline(y=0, line=dict(color="#444", width=1))
+        fig.update_layout(**LAYOUT, height=400,
+                          xaxis=dict(**_AXIS, title="Temps (s)"),
+                          yaxis=dict(**_AXIS, title="Accélération (m/s²)"))
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.divider()
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.subheader("Accél. max au départ")
+            st.caption("Pic d'accélération dans les 10 premières secondes")
+        with col2:
+            st.subheader("Accél. moy sur le lap")
+        with col3:
+            st.subheader("Décél. en fin de course")
+            st.caption("Accélération moy sur les 10 dernières secondes")
+
+        for coureur in coureurs_sel:
+            seg = get_fit(coureur, seance_a, "tour2")
+            if seg is None or "enhanced_speed" not in seg.columns:
+                continue
+            seg_c = seg.dropna(subset=["enhanced_speed"]).copy()
+            if len(seg_c) < 4:
+                continue
+            v = seg_c["enhanced_speed"].rolling(3, center=True, min_periods=1).mean()
+            t = seg_c["t_rel"]
+            accel = (v.diff() / t.diff().replace(0, np.nan)).rolling(3, center=True, min_periods=1).mean()
+            accel.index = seg_c.index
+            t.index = seg_c.index
+
+            a_start = accel[t <= t.min() + 10].max()
+            a_mean  = accel.mean()
+            a_end   = accel[t >= t.max() - 10].mean()
+
+            color = COLORS.get(coureur, "#888")
+            with col1:
+                st.metric(coureur, f"{a_start:.3f} m/s²" if pd.notna(a_start) else "N/A",
+                          delta=None, label_visibility="visible")
+            with col2:
+                st.metric(coureur, f"{a_mean:.3f} m/s²" if pd.notna(a_mean) else "N/A")
+            with col3:
+                st.metric(coureur, f"{a_end:.3f} m/s²" if pd.notna(a_end) else "N/A")
+    else:
+        st.info("Données FIT non disponibles.")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  7 — RÉCUPÉRATION CARDIAQUE
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "7 · Récupération cardiaque":
+    st.title("Récupération cardiaque post-Tour 2")
+    st.caption("Descente de la FC après la fin du lap d'effort maximal")
+
+    seance_r = st.selectbox("Séance", sorted(df["Séance"].unique()))
+    seuil_bpm = st.slider("Seuil de récupération (bpm)", 100, 150, 120)
+
+    fig = go.Figure()
+    recov_data = []
+    for coureur in coureurs_sel:
+        seg = get_fit(coureur, seance_r, "post_tour2")
+        if seg is None or "heart_rate" not in seg.columns:
+            continue
+        seg_c = seg.dropna(subset=["heart_rate"])
+        if seg_c.empty:
+            continue
+
+        fc_start = seg_c["heart_rate"].iloc[0]
+        # Temps pour passer sous le seuil
+        below = seg_c[seg_c["heart_rate"] <= seuil_bpm]
+        t_seuil = below["t_rel"].iloc[0] if not below.empty else None
+
+        fig.add_trace(go.Scatter(
+            x=seg_c["t_rel"], y=seg_c["heart_rate"],
+            name=coureur, mode="lines",
+            line=dict(color=COLORS.get(coureur, "#888"), width=2.5),
+            hovertemplate=f"<b>{coureur}</b><br>t=%{{x:.0f}}s · %{{y:.0f}} bpm<extra></extra>",
+        ))
+        recov_data.append({
+            "Coureur": coureur,
+            "FC départ (bpm)": int(fc_start),
+            f"Temps < {seuil_bpm} bpm (s)": f"{int(t_seuil)}s" if t_seuil else "> 4 min",
+            "FC à 60s (bpm)": int(seg_c[seg_c["t_rel"] <= 60]["heart_rate"].iloc[-1])
+                              if not seg_c[seg_c["t_rel"] <= 60].empty else "N/A",
+        })
+
+    fig.add_hline(y=seuil_bpm, line=dict(color="#FF8F00", dash="dot", width=1.5),
+                  annotation_text=f"seuil {seuil_bpm} bpm",
+                  annotation_font_color="#FF8F00")
+    if fig.data:
+        fig.update_layout(**LAYOUT, height=400,
+                          xaxis=dict(**_AXIS, title="Secondes après fin Tour 2"),
+                          yaxis=dict(**_AXIS, title="FC (bpm)"))
+        st.plotly_chart(fig, use_container_width=True)
+
+        if recov_data:
+            st.subheader("Tableau de récupération")
+            st.dataframe(pd.DataFrame(recov_data).set_index("Coureur"),
+                         use_container_width=True)
+    else:
+        st.info("Données FIT post-Tour 2 non disponibles.")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  8 — HEATMAP MÉTÉO
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "8 · Heatmap Météo":
+    st.title("Heatmap Météo × Performance")
+
+    has_meteo = "temperature_c" in df.columns and df["temperature_c"].notna().any()
+    if not has_meteo:
+        st.warning("Données météo non disponibles.")
+        st.stop()
+
+    metrique = st.selectbox("Métrique", ["Temps400m_s", "FC_moy", "Puissance_w"],
+                             format_func=lambda x: {
+                                 "Temps400m_s": "Temps 400m (s)",
+                                 "FC_moy": "FC moyenne (bpm)",
+                                 "Puissance_w": "Puissance (W)"
+                             }[x])
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Heatmap Température × Coureur")
+        pivot = df.pivot_table(index="Coureur", columns="Séance",
+                               values=metrique, aggfunc="mean")
+        temp_labels = {s: f"S{s}\n{df[df['Séance']==s]['temperature_c'].mean():.1f}°C"
+                       for s in pivot.columns}
+        fig = go.Figure(go.Heatmap(
+            z=pivot.values,
+            x=[temp_labels.get(c, f"S{c}") for c in pivot.columns],
+            y=pivot.index.tolist(),
+            text=np.round(pivot.values, 1),
+            texttemplate="%{text}",
+            textfont=dict(color="white", size=13),
+            colorscale=[[0, "#1B5E20"], [0.5, "#F9A825"], [1, "#B71C1C"]],
+            reversescale=(metrique == "Temps400m_s"),
+            showscale=True,
+            hovertemplate="<b>%{y}</b> · %{x}<br>%{z:.1f}<extra></extra>",
+        ))
+        fig.update_layout(**LAYOUT, height=360)
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        st.subheader("Scatter Température × Métrique")
+        df_sc = df.dropna(subset=["temperature_c", metrique])
+        fig2 = go.Figure()
+        for coureur in coureurs_sel:
+            dc = df_sc[df_sc["Coureur"] == coureur]
+            if dc.empty:
+                continue
+            fig2.add_trace(go.Scatter(
+                x=dc["temperature_c"], y=dc[metrique],
+                name=coureur, mode="markers",
+                marker=dict(size=16, color=COLORS.get(coureur, "#888"),
+                            line=dict(width=2, color="#0d0d0d")),
+                hovertemplate=f"<b>{coureur}</b><br>%{{x:.1f}}°C → %{{y:.1f}}<extra></extra>",
+            ))
+        add_trendline(fig2, df_sc["temperature_c"], df_sc[metrique])
+        inv = (metrique == "Temps400m_s")
+        fig2.update_layout(**LAYOUT, height=360,
+                           xaxis=dict(**_AXIS, title="Température (°C)"),
+                           yaxis=dict(**_AXIS, autorange="reversed" if inv else True,
+                                      title=metrique))
+        st.plotly_chart(fig2, use_container_width=True)
+
+    st.divider()
+    st.subheader("Humidité × Temps 400m")
+    df_h = df.dropna(subset=["humidite_pct", "Temps400m_s"])
+    fig3 = go.Figure()
+    for coureur in coureurs_sel:
+        dc = df_h[df_h["Coureur"] == coureur]
+        if dc.empty:
+            continue
+        fig3.add_trace(go.Scatter(
+            x=dc["humidite_pct"], y=dc["Temps400m_s"],
+            name=coureur, mode="markers",
+            marker=dict(size=14, color=COLORS.get(coureur, "#888"),
+                        line=dict(width=2, color="#0d0d0d")),
+            hovertemplate=f"<b>{coureur}</b><br>%{{x}}% · {{}}<extra></extra>",
+        ))
+    add_trendline(fig3, df_h["humidite_pct"], df_h["Temps400m_s"])
+    fig3.update_layout(**LAYOUT, height=340,
+                       xaxis=dict(**_AXIS, title="Humidité (%)"),
+                       yaxis=dict(**_AXIS, autorange="reversed", title="Temps 400m (s)"))
+    st.plotly_chart(fig3, use_container_width=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  9 — PROGRESSION
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "9 · Progression":
+    st.title("Courbes de progression — Tour 2")
+    st.caption("Évolution séance par séance · Khalil absent S3 (maladie)")
+
+    metrique_p = st.radio("Métrique", ["Temps400m_s", "FC_max", "Puissance_w"],
+                           format_func=lambda x: {
+                               "Temps400m_s": "Temps au 400m",
+                               "FC_max": "FC max",
+                               "Puissance_w": "Puissance"
+                           }[x], horizontal=True)
+    inv_y = (metrique_p == "Temps400m_s")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Évolution absolue")
+        fig = go.Figure()
+        for coureur in coureurs_sel:
+            dc = df[df["Coureur"] == coureur].sort_values("Séance").dropna(subset=[metrique_p])
+            if dc.empty:
+                continue
+            fig.add_trace(go.Scatter(
+                x=dc["Séance"], y=dc[metrique_p],
+                name=coureur, mode="lines+markers",
+                line=dict(color=COLORS.get(coureur, "#888"), width=2.5),
+                marker=dict(size=11, line=dict(width=2, color="#0d0d0d")),
+                hovertemplate=f"<b>{coureur}</b> · S%{{x}}<br>%{{y:.1f}}<extra></extra>",
+            ))
+        fig.update_layout(
+            **LAYOUT, height=380,
+            xaxis=dict(**_AXIS, title="Séance", dtick=1),
+            yaxis=dict(**_AXIS, autorange="reversed" if inv_y else True),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        st.subheader("Progression vs Séance 1 (%)")
+        st.caption("Positif = amélioration · négatif = régression")
+
+        fig2 = go.Figure()
+        for coureur in coureurs_sel:
+            dc = df[df["Coureur"] == coureur].sort_values("Séance").dropna(subset=[metrique_p])
+            if dc.empty or dc[dc["Séance"] == 1].empty:
+                continue
+            base = dc[dc["Séance"] == 1][metrique_p].values[0]
+            rest = dc[dc["Séance"] > 1].copy()
+            if inv_y:
+                rest["pct"] = (base - rest[metrique_p]) / base * 100
+            else:
+                rest["pct"] = (rest[metrique_p] - base) / base * 100
+            fig2.add_trace(go.Scatter(
+                x=rest["Séance"], y=rest["pct"],
+                name=coureur, mode="lines+markers",
+                line=dict(color=COLORS.get(coureur, "#888"), width=2.5),
+                marker=dict(size=11),
+                text=[f"{v:+.1f}%" for v in rest["pct"]],
+                hovertemplate=f"<b>{coureur}</b> · S%{{x}}<br>%{{text}}<extra></extra>",
+            ))
+        fig2.add_hline(y=0, line=dict(color="#444", width=1))
+        fig2.update_layout(**LAYOUT, height=380,
+                           xaxis=dict(**_AXIS, title="Séance", dtick=1),
+                           yaxis=dict(**_AXIS, title="%"))
+        st.plotly_chart(fig2, use_container_width=True)
+
+    st.divider()
+    st.subheader("Tableau de synthèse — Temps 400m toutes séances")
+    rows = []
+    for coureur in sorted(coureurs_sel):
+        row = {"Coureur": coureur}
+        dc = df[df["Coureur"] == coureur].sort_values("Séance")
+        for s in sorted(df_all["Séance"].unique()):
+            r = dc[dc["Séance"] == s]
+            row[f"S{s}"] = r["Temps400m_str"].values[0] if not r.empty else "—"
+        dc_c = df[df["Coureur"] == coureur].dropna(subset=["Temps400m_s"])
+        row["Meilleur"] = dc_c.loc[dc_c["Temps400m_s"].idxmin(), "Temps400m_str"] if not dc_c.empty else "—"
+        rows.append(row)
+    st.dataframe(pd.DataFrame(rows).set_index("Coureur"), use_container_width=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  10 — CARTE GPS ANIMÉE
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "10 · Carte GPS animée":
+    st.title("Carte GPS — Simulation Tour 2")
+    st.caption("Positionnement second-par-second sur le parcours réel · Parc de Champagne, Reims")
+
+    seance_map = st.selectbox("Séance", sorted(df["Séance"].unique()), key="map_seance")
+
+    segs = {}
+    for coureur in coureurs_sel:
+        seg = get_fit(coureur, seance_map, "tour2")
+        if seg is not None:
+            seg = seg.dropna(subset=["position_lat", "position_long"]).copy()
+            if not seg.empty:
+                segs[coureur] = seg
+
+    if not segs:
+        st.info("Données GPS non disponibles.")
+    else:
+        max_t = int(max(s["t_rel"].max() for s in segs.values()))
+        center_lat = np.mean([s["position_lat"].mean() for s in segs.values()])
+        center_lon = np.mean([s["position_long"].mean() for s in segs.values()])
+
+        col_mode, _ = st.columns([2, 3])
+        with col_mode:
+            mode = st.radio("Mode", ["Slider interactif", "Animation Plotly"], horizontal=True)
+
+        if mode == "Slider interactif":
+            t_sel = st.slider("⏱ Secondes depuis départ Tour 2", 0, max_t, 0)
+
+            fig = go.Figure()
+            for coureur, seg in segs.items():
+                color = COLORS.get(coureur, "#888")
+                # Tracé complet (transparent)
+                fig.add_trace(go.Scattermapbox(
+                    lat=seg["position_lat"].tolist(),
+                    lon=seg["position_long"].tolist(),
+                    mode="lines",
+                    line=dict(color=color, width=3),
+                    opacity=0.35,
+                    name=coureur,
+                    showlegend=True,
+                ))
+                # Position actuelle
+                row = seg.iloc[(seg["t_rel"] - t_sel).abs().argsort().iloc[0]]
+                finished = t_sel > seg["t_rel"].max()
+                v_kmh = (row.get("enhanced_speed", 0) or 0) * 3.6
+                fig.add_trace(go.Scattermapbox(
+                    lat=[row["position_lat"]],
+                    lon=[row["position_long"]],
+                    mode="markers+text",
+                    marker=dict(size=18 if not finished else 10,
+                                color=color,
+                                opacity=1.0 if not finished else 0.3),
+                    text=[f"{coureur}{'✓' if finished else ''}"],
+                    textposition="top right",
+                    name=f"{coureur} pos",
+                    showlegend=False,
+                    hovertext=f"{coureur} · {v_kmh:.1f} km/h{' · ARRIVÉ' if finished else ''}",
+                    hoverinfo="text",
+                ))
+
+            fig.update_layout(
+                mapbox=dict(style="open-street-map",
+                            center=dict(lat=center_lat, lon=center_lon), zoom=16),
+                **LAYOUT, height=550,
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+        else:
+            # Build padded DataFrame for px animation
+            rows_anim = []
+            for coureur, seg in segs.items():
+                t_max_c = seg["t_rel"].max()
+                for t in range(0, max_t + 1):
+                    row = seg.iloc[(seg["t_rel"] - t).abs().argsort().iloc[0]]
+                    finished = t > t_max_c
+                    rows_anim.append({
+                        "Coureur": coureur,
+                        "t": t,
+                        "lat": row["position_lat"],
+                        "lon": row["position_long"],
+                        "Vitesse (km/h)": round((row.get("enhanced_speed", 0) or 0) * 3.6, 1),
+                        "Statut": "Terminé" if finished else "En course",
+                    })
+
+            anim_df = pd.DataFrame(rows_anim)
+            fig_anim = px.scatter_mapbox(
+                anim_df, lat="lat", lon="lon",
+                color="Coureur",
+                color_discrete_map=COLORS,
+                animation_frame="t",
+                hover_name="Coureur",
+                hover_data={"Vitesse (km/h)": True, "Statut": True, "t": False, "lat": False, "lon": False},
+                size_max=18,
+                zoom=16,
+                mapbox_style="open-street-map",
+                center={"lat": center_lat, "lon": center_lon},
+            )
+            # Add static path traces
+            for coureur, seg in segs.items():
+                fig_anim.add_trace(go.Scattermapbox(
+                    lat=seg["position_lat"].tolist(),
+                    lon=seg["position_long"].tolist(),
+                    mode="lines",
+                    line=dict(color=COLORS.get(coureur, "#888"), width=2),
+                    opacity=0.3,
+                    name=f"{coureur} (tracé)",
+                    showlegend=False,
+                ))
+            fig_anim.update_layout(**LAYOUT, height=580)
+            st.plotly_chart(fig_anim, use_container_width=True)
+
+        # Stats GPS
+        st.divider()
+        st.subheader("Vitesse max GPS par coureur")
+        gps_stats = []
+        for coureur, seg in segs.items():
+            gps_stats.append({
+                "Coureur": coureur,
+                "Vmax (km/h)": round(seg["enhanced_speed"].max() * 3.6, 1),
+                "Vmoy (km/h)": round(seg["enhanced_speed"].mean() * 3.6, 1),
+                "Durée Tour 2 (s)": int(seg["t_rel"].max()),
+            })
+        st.dataframe(pd.DataFrame(gps_stats).set_index("Coureur"), use_container_width=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  11 — TOUR 1 / 2 / 3
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "11 · Tour 1 / 2 / 3":
+    st.title("Comparaison Tour 1 / Tour 2 / Tour 3")
+    st.caption("Échauffement vs Effort maximal vs Récupération — structure réelle de la séance 3×400m")
+
+    seance_t = st.selectbox("Séance", sorted(df["Séance"].unique()), key="t123_seance")
+    metrique_t = st.radio("Métrique", ["Vitesse (m/s)", "FC (bpm)", "Cadence (spm)"],
+                          horizontal=True, key="t123_met")
+
+    col_map = {"Vitesse (m/s)": "enhanced_speed", "FC (bpm)": "heart_rate", "Cadence (spm)": "cadence"}
+    col_t = col_map[metrique_t]
+
+    TOUR_COLORS = {"Tour 1": "#607D8B", "Tour 2": "#FF5722", "Tour 3": "#4CAF50"}
+    TOUR_DASH   = {"Tour 1": "dot", "Tour 2": "solid", "Tour 3": "dash"}
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Profil au fil du temps")
+        st.caption("Superposition des 3 tours pour chaque coureur")
+        coureur_t = st.selectbox("Coureur", coureurs_sel, key="t123_coureur")
+
+        tours = load_all_tours(coureur_t, seance_t)
+        if tours is None:
+            st.info(f"Données insuffisantes pour détecter les 3 tours de {coureur_t} S{seance_t}.")
+        else:
+            fig = go.Figure()
+            for tname, tdf in tours.items():
+                label = tname.replace("tour", "Tour ")
+                if col_t not in tdf.columns or tdf[col_t].isna().all():
+                    continue
+                y = tdf[col_t].rolling(3, center=True, min_periods=1).mean()
+                if col_t == "cadence":
+                    y = y * 2  # single-foot → total spm
+                fig.add_trace(go.Scatter(
+                    x=tdf["t_lap"], y=y,
+                    name=label, mode="lines",
+                    line=dict(color=TOUR_COLORS.get(label, "#888"),
+                              dash=TOUR_DASH.get(label, "solid"), width=2.5),
+                    hovertemplate=f"<b>{label}</b><br>t=%{{x:.0f}}s · %{{y:.2f}}<extra></extra>",
+                ))
+            fig.update_layout(**LAYOUT, height=380,
+                              xaxis=dict(**_AXIS, title="Temps dans le tour (s)"),
+                              yaxis=dict(**_AXIS, title=metrique_t))
+            st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        st.subheader("Moyenne par tour — tous coureurs")
+        st.caption("Comparaison de l'effort moyen sur chaque tour")
+
+        summary_rows = []
+        for coureur in coureurs_sel:
+            tours = load_all_tours(coureur, seance_t)
+            if tours is None:
+                continue
+            for tname, tdf in tours.items():
+                label = tname.replace("tour", "Tour ")
+                if col_t not in tdf.columns or tdf[col_t].isna().all():
+                    continue
+                val = tdf[col_t].mean()
+                if col_t == "cadence":
+                    val *= 2
+                summary_rows.append({"Coureur": coureur, "Tour": label, "val": val})
+
+        if summary_rows:
+            df_sum = pd.DataFrame(summary_rows)
+            fig2 = go.Figure()
+            for tour_label in ["Tour 1", "Tour 2", "Tour 3"]:
+                d = df_sum[df_sum["Tour"] == tour_label]
+                if d.empty:
+                    continue
+                fig2.add_trace(go.Bar(
+                    name=tour_label,
+                    x=d["Coureur"], y=d["val"],
+                    marker_color=TOUR_COLORS.get(tour_label, "#888"),
+                    text=[f"{v:.1f}" for v in d["val"]],
+                    textposition="outside", textfont=dict(color="white", size=10),
+                ))
+            fig2.update_layout(**LAYOUT, barmode="group", height=380,
+                               yaxis=dict(**_AXIS, title=metrique_t))
+            st.plotly_chart(fig2, use_container_width=True)
+
+    st.divider()
+    st.subheader("Tableau récapitulatif — moyennes par tour")
+    recap = []
+    for coureur in sorted(coureurs_sel):
+        tours = load_all_tours(coureur, seance_t)
+        if tours is None:
+            continue
+        row = {"Coureur": coureur}
+        for tname, tdf in tours.items():
+            label = tname.replace("tour", "Tour ")
+            v_moy = tdf["enhanced_speed"].mean() * 3.6 if "enhanced_speed" in tdf.columns else None
+            fc_moy = tdf["heart_rate"].mean() if "heart_rate" in tdf.columns else None
+            dur = int(tdf["t_lap"].max()) if not tdf.empty else None
+            row[f"{label} — Allure"] = f"{v_moy:.1f} km/h" if v_moy else "N/A"
+            row[f"{label} — FC moy"] = f"{fc_moy:.0f} bpm" if fc_moy and not pd.isna(fc_moy) else "N/A"
+            row[f"{label} — Durée"] = f"{dur}s" if dur else "N/A"
+        recap.append(row)
+    if recap:
+        st.dataframe(pd.DataFrame(recap).set_index("Coureur"), use_container_width=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  12 — SPLITS 100M
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "12 · Splits 100m":
+    st.title("Splits 100m — Tour 2")
+    st.caption("Temps pour chaque tranche de 100m · révèle la stratégie de course")
+
+    seance_sp = st.selectbox("Séance", sorted(df["Séance"].unique()), key="split_seance")
+
+    def get_splits(coureur, seance):
+        seg = get_fit(coureur, seance, "tour2")
+        if seg is None or "dist_rel" not in seg.columns:
+            return None
+        seg = seg.dropna(subset=["dist_rel"]).copy()
+        if seg.empty or seg["dist_rel"].max() < 150:
+            return None
+        splits = []
+        prev_t = 0.0
+        for mark in [100, 200, 300, 400]:
+            above = seg[seg["dist_rel"] >= mark]
+            if above.empty:
+                break
+            t_cross = above["t_rel"].iloc[0]
+            splits.append({"100m": f"{mark-100}–{mark}m", "Temps (s)": round(t_cross - prev_t, 1)})
+            prev_t = t_cross
+        return splits
+
+    # Tableau des splits
+    all_splits = {}
+    for coureur in coureurs_sel:
+        sp = get_splits(coureur, seance_sp)
+        if sp:
+            all_splits[coureur] = sp
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Temps par 100m (secondes)")
+        fig = go.Figure()
+        for coureur, splits in all_splits.items():
+            x = [s["100m"] for s in splits]
+            y = [s["Temps (s)"] for s in splits]
+            fig.add_trace(go.Scatter(
+                x=x, y=y, name=coureur,
+                mode="lines+markers",
+                line=dict(color=COLORS.get(coureur, "#888"), width=2.5),
+                marker=dict(size=12),
+                text=[f"{v}s" for v in y],
+                hovertemplate=f"<b>{coureur}</b> · %{{x}}<br>%{{y}}s<extra></extra>",
+            ))
+        fig.update_layout(**LAYOUT, height=380,
+                          xaxis=dict(**_AXIS, title="Segment"),
+                          yaxis=dict(**_AXIS, title="Temps (s)"))
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        st.subheader("Allure par 100m (min/km)")
+        fig2 = go.Figure()
+        for coureur, splits in all_splits.items():
+            x = [s["100m"] for s in splits]
+            # 100m en t secondes → allure en s/km = t * 10
+            y = [s["Temps (s)"] * 10 for s in splits]
+            labels = [f"{int(v)//60}:{int(v)%60:02d}/km" for v in y]
+            fig2.add_trace(go.Scatter(
+                x=x, y=y, name=coureur,
+                mode="lines+markers",
+                line=dict(color=COLORS.get(coureur, "#888"), width=2.5),
+                marker=dict(size=12),
+                text=labels,
+                hovertemplate=f"<b>{coureur}</b> · %{{x}}<br>%{{text}}<extra></extra>",
+            ))
+        fig2.update_layout(**LAYOUT, height=380,
+                           xaxis=dict(**_AXIS, title="Segment"),
+                           yaxis=dict(**_AXIS, autorange="reversed", title="s/km"))
+        st.plotly_chart(fig2, use_container_width=True)
+
+    st.divider()
+    st.subheader("Analyse : qui gère le mieux son effort ?")
+    st.caption("Ratio dernier 100m / premier 100m · < 1 = accélération finale · > 1 = ralentissement")
+    ratio_rows = []
+    for coureur, splits in all_splits.items():
+        if len(splits) >= 4:
+            ratio = splits[-1]["Temps (s)"] / splits[0]["Temps (s)"]
+            ratio_rows.append({
+                "Coureur": coureur,
+                "0–100m (s)": splits[0]["Temps (s)"],
+                "300–400m (s)": splits[-1]["Temps (s)"],
+                "Ratio fin/début": round(ratio, 3),
+                "Interprétation": "Accélère 🚀" if ratio < 0.95 else ("Stable ✅" if ratio < 1.05 else "Ralentit 📉"),
+            })
+    if ratio_rows:
+        st.dataframe(pd.DataFrame(ratio_rows).set_index("Coureur"), use_container_width=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  13 — DISTRIBUTION DES VITESSES
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "13 · Distribution vitesses":
+    st.title("Distribution des vitesses — Tour 2")
+    st.caption("Quelle % du lap chaque coureur passe à quelle vitesse ?")
+
+    seance_dv = st.selectbox("Séance", sorted(df["Séance"].unique()), key="dv_seance")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Histogramme de vitesse (km/h)")
+        fig = go.Figure()
+        for coureur in coureurs_sel:
+            seg = get_fit(coureur, seance_dv, "tour2")
+            if seg is None or "enhanced_speed" not in seg.columns:
+                continue
+            v = seg["enhanced_speed"].dropna() * 3.6
+            fig.add_trace(go.Histogram(
+                x=v, name=coureur,
+                marker_color=COLORS.get(coureur, "#888"),
+                opacity=0.65,
+                histnorm="percent",
+                xbins=dict(size=0.5),
+                hovertemplate=f"<b>{coureur}</b><br>%{{x:.1f}} km/h · %{{y:.1f}}%<extra></extra>",
+            ))
+        fig.update_layout(**LAYOUT, barmode="overlay", height=380,
+                          xaxis=dict(**_AXIS, title="Vitesse (km/h)"),
+                          yaxis=dict(**_AXIS, title="% du temps"))
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        st.subheader("Violin plot — dispersion des vitesses")
+        fig2 = go.Figure()
+        for coureur in coureurs_sel:
+            seg = get_fit(coureur, seance_dv, "tour2")
+            if seg is None or "enhanced_speed" not in seg.columns:
+                continue
+            v = seg["enhanced_speed"].dropna() * 3.6
+            fig2.add_trace(go.Violin(
+                y=v, name=coureur,
+                fillcolor=COLORS.get(coureur, "#888"),
+                line_color=COLORS.get(coureur, "#888"),
+                opacity=0.7,
+                box_visible=True,
+                meanline_visible=True,
+            ))
+        fig2.update_layout(**LAYOUT, height=380,
+                           yaxis=dict(**_AXIS, title="Vitesse (km/h)"))
+        st.plotly_chart(fig2, use_container_width=True)
+
+    st.divider()
+    st.subheader("Zones de vitesse (% du temps par zone)")
+    zones = [(0, 10, "< 10 km/h"), (10, 15, "10–15"), (15, 20, "15–20"),
+             (20, 25, "20–25"), (25, 30, "25–30"), (30, 100, "> 30 km/h")]
+    zone_rows = []
+    for coureur in coureurs_sel:
+        seg = get_fit(coureur, seance_dv, "tour2")
+        if seg is None or "enhanced_speed" not in seg.columns:
+            continue
+        v = seg["enhanced_speed"].dropna() * 3.6
+        row = {"Coureur": coureur}
+        for lo, hi, label in zones:
+            pct = ((v >= lo) & (v < hi)).sum() / len(v) * 100
+            row[label] = f"{pct:.0f}%"
+        zone_rows.append(row)
+    if zone_rows:
+        st.dataframe(pd.DataFrame(zone_rows).set_index("Coureur"), use_container_width=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  14 — ALLURE INSTANTANÉE
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "14 · Allure instantanée":
+    st.title("Allure instantanée — Tour 2")
+    st.caption("min/km second-par-second · plus bas = plus rapide")
+
+    seance_ai = st.selectbox("Séance", sorted(df["Séance"].unique()), key="ai_seance")
+    axe_ai = st.radio("Axe X", ["Temps (s)", "Distance (m)"], horizontal=True, key="ai_axe")
+
+    fig = go.Figure()
+    for coureur in coureurs_sel:
+        seg = get_fit(coureur, seance_ai, "tour2")
+        if seg is None or "enhanced_speed" not in seg.columns:
+            continue
+        seg_c = seg.dropna(subset=["enhanced_speed"]).copy()
+        # Allure en s/km = 1000 / vitesse_ms, capée à 600 s/km (10 min/km)
+        seg_c["allure_s_km"] = (1000 / seg_c["enhanced_speed"].replace(0, np.nan)).clip(upper=600)
+        seg_c["allure_s_km"] = seg_c["allure_s_km"].rolling(3, center=True, min_periods=1).mean()
+        seg_c["allure_label"] = seg_c["allure_s_km"].apply(
+            lambda s: f"{int(s)//60}:{int(s)%60:02d}/km" if pd.notna(s) else "N/A"
+        )
+        x = seg_c["t_rel"] if axe_ai == "Temps (s)" else seg_c["dist_rel"]
+        fig.add_trace(go.Scatter(
+            x=x, y=seg_c["allure_s_km"],
+            name=coureur, mode="lines",
+            line=dict(color=COLORS.get(coureur, "#888"), width=2.5),
+            text=seg_c["allure_label"],
+            hovertemplate=f"<b>{coureur}</b><br>%{{text}}<extra></extra>",
+        ))
+    fig.update_layout(
+        **LAYOUT, height=420,
+        xaxis=dict(**_AXIS, title=axe_ai),
+        yaxis=dict(**_AXIS, autorange="reversed", title="Allure (s/km)",
+                   tickvals=list(range(120, 601, 30)),
+                   ticktext=[f"{v//60}:{v%60:02d}" for v in range(120, 601, 30)]),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.divider()
+    st.subheader("Comparaison toutes séances — allure min atteinte")
+    fig2 = go.Figure()
+    for coureur in coureurs_sel:
+        pts = []
+        for s in sorted(df_all["Séance"].unique()):
+            seg = get_fit(coureur, s, "tour2")
+            if seg is None or "enhanced_speed" not in seg.columns:
+                continue
+            v_max = seg["enhanced_speed"].max()
+            if pd.notna(v_max) and v_max > 0:
+                pts.append({"Séance": s, "allure_min": 1000 / v_max})
+        if pts:
+            d = pd.DataFrame(pts)
+            fig2.add_trace(go.Scatter(
+                x=d["Séance"], y=d["allure_min"],
+                name=coureur, mode="lines+markers",
+                line=dict(color=COLORS.get(coureur, "#888"), width=2.5),
+                marker=dict(size=10),
+                text=d["allure_min"].apply(lambda s: f"{int(s)//60}:{int(s)%60:02d}/km"),
+                hovertemplate=f"<b>{coureur}</b> · S%{{x}}<br>%{{text}}<extra></extra>",
+            ))
+    fig2.update_layout(**LAYOUT, height=320,
+                       xaxis=dict(**_AXIS, title="Séance", dtick=1),
+                       yaxis=dict(**_AXIS, autorange="reversed", title="Allure sprint (s/km)"))
+    st.plotly_chart(fig2, use_container_width=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  15 — PUISSANCE W/KG
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "15 · Puissance W/kg":
+    st.title("Puissance relative — W/kg")
+    st.caption("Corrige le biais du profil Garmin Arthur 70 kg en rapportant la puissance au poids réel")
+
+    poids_info = " · ".join(f"{c} {POIDS.get(c, '?')} kg" for c in sorted(COUREURS_CONNUS) if c in coureurs_sel)
+    st.info(f"Poids utilisés : {poids_info}")
+
+    df_wkg = df.copy()
+    df_wkg["Puissance_wkg"] = df_wkg.apply(
+        lambda r: r["Puissance_w"] / POIDS.get(r["Coureur"], 70) if pd.notna(r["Puissance_w"]) else None,
+        axis=1
+    )
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("W/kg par séance")
+        fig = go.Figure()
+        for coureur in coureurs_sel:
+            dc = df_wkg[df_wkg["Coureur"] == coureur].sort_values("Séance").dropna(subset=["Puissance_wkg"])
+            if dc.empty:
+                continue
+            fig.add_trace(go.Scatter(
+                x=dc["Séance"], y=dc["Puissance_wkg"],
+                name=coureur, mode="lines+markers",
+                line=dict(color=COLORS.get(coureur, "#888"), width=2.5),
+                marker=dict(size=11),
+                text=[f"{v:.2f} W/kg" for v in dc["Puissance_wkg"]],
+                hovertemplate=f"<b>{coureur}</b> · S%{{x}}<br>%{{text}}<extra></extra>",
+            ))
+        fig.update_layout(**LAYOUT, height=360,
+                          xaxis=dict(**_AXIS, title="Séance", dtick=1),
+                          yaxis=dict(**_AXIS, title="W/kg"))
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        st.subheader("Comparaison Watts bruts vs W/kg")
+        st.caption("Voir si le classement change après correction du poids")
+        df_cmp = df_wkg.groupby("Coureur").agg(
+            Puissance_brute=("Puissance_w", "mean"),
+            Puissance_wkg=("Puissance_wkg", "mean"),
+        ).reset_index().dropna()
+        df_cmp = df_cmp.sort_values("Puissance_wkg", ascending=False)
+
+        fig2 = go.Figure()
+        fig2.add_trace(go.Bar(
+            name="Watts bruts",
+            x=df_cmp["Coureur"], y=df_cmp["Puissance_brute"],
+            marker_color=[COLORS.get(c, "#888") for c in df_cmp["Coureur"]],
+            opacity=0.5,
+            text=[f"{v:.0f}W" for v in df_cmp["Puissance_brute"]],
+            textposition="outside", textfont=dict(color="white"),
+            yaxis="y1",
+        ))
+        fig2.add_trace(go.Scatter(
+            name="W/kg",
+            x=df_cmp["Coureur"], y=df_cmp["Puissance_wkg"],
+            mode="markers+text",
+            marker=dict(size=16, color=[COLORS.get(c, "#888") for c in df_cmp["Coureur"]],
+                        line=dict(width=2, color="#fff")),
+            text=[f"{v:.2f}" for v in df_cmp["Puissance_wkg"]],
+            textposition="top center", textfont=dict(color="white"),
+            yaxis="y2",
+        ))
+        fig2.update_layout(
+            **LAYOUT, height=360,
+            yaxis=dict(**_AXIS, title="Watts"),
+            yaxis2=dict(**_AXIS, overlaying="y", side="right", title="W/kg", showgrid=False),
+        )
+        st.plotly_chart(fig2, use_container_width=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  16 — FC VS DISTANCE
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "16 · FC vs Distance":
+    st.title("FC vs Distance — Tour 2")
+    st.caption("Réponse cardiaque en fonction de la position sur le 400m")
+
+    seance_fd = st.selectbox("Séance", sorted(df["Séance"].unique()), key="fd_seance")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("FC vs Distance parcourue")
+        fig = go.Figure()
+        for coureur in coureurs_sel:
+            seg = get_fit(coureur, seance_fd, "tour2")
+            if seg is None or "heart_rate" not in seg.columns:
+                continue
+            seg_c = seg.dropna(subset=["heart_rate", "dist_rel"])
+            if seg_c.empty:
+                continue
+            y = seg_c["heart_rate"].rolling(3, center=True, min_periods=1).mean()
+            fig.add_trace(go.Scatter(
+                x=seg_c["dist_rel"], y=y,
+                name=coureur, mode="lines",
+                line=dict(color=COLORS.get(coureur, "#888"), width=2.5),
+                hovertemplate=f"<b>{coureur}</b><br>%{{x:.0f}}m · %{{y:.0f}} bpm<extra></extra>",
+            ))
+        fig.update_layout(**LAYOUT, height=380,
+                          xaxis=dict(**_AXIS, title="Distance (m)"),
+                          yaxis=dict(**_AXIS, title="FC (bpm)"))
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        st.subheader("FC vs Vitesse (scatter)")
+        st.caption("Montre si la FC suit la vitesse instantanée")
+        fig2 = go.Figure()
+        for coureur in coureurs_sel:
+            seg = get_fit(coureur, seance_fd, "tour2")
+            if seg is None:
+                continue
+            seg_c = seg.dropna(subset=["heart_rate", "enhanced_speed"])
+            if seg_c.empty:
+                continue
+            fig2.add_trace(go.Scatter(
+                x=seg_c["enhanced_speed"] * 3.6,
+                y=seg_c["heart_rate"],
+                name=coureur, mode="markers",
+                marker=dict(size=6, color=COLORS.get(coureur, "#888"), opacity=0.7),
+                hovertemplate=f"<b>{coureur}</b><br>%{{x:.1f}} km/h · %{{y:.0f}} bpm<extra></extra>",
+            ))
+        fig2.update_layout(**LAYOUT, height=380,
+                           xaxis=dict(**_AXIS, title="Vitesse (km/h)"),
+                           yaxis=dict(**_AXIS, title="FC (bpm)"))
+        st.plotly_chart(fig2, use_container_width=True)
+
+    st.divider()
+    st.subheader("FC max / FC moy par 100m — qui souffre le plus en fin de course ?")
+    fig3 = go.Figure()
+    marks = [("0–100m", 0, 100), ("100–200m", 100, 200), ("200–300m", 200, 300), ("300–400m", 300, 400)]
+    for coureur in coureurs_sel:
+        seg = get_fit(coureur, seance_fd, "tour2")
+        if seg is None or "heart_rate" not in seg.columns:
+            continue
+        seg_c = seg.dropna(subset=["heart_rate", "dist_rel"])
+        fc_by_zone = []
+        for label, lo, hi in marks:
+            zone = seg_c[(seg_c["dist_rel"] >= lo) & (seg_c["dist_rel"] < hi)]
+            fc_by_zone.append(zone["heart_rate"].mean() if not zone.empty else None)
+        fig3.add_trace(go.Scatter(
+            x=[m[0] for m in marks], y=fc_by_zone,
+            name=coureur, mode="lines+markers",
+            line=dict(color=COLORS.get(coureur, "#888"), width=2.5),
+            marker=dict(size=10),
+            hovertemplate=f"<b>{coureur}</b> · %{{x}}<br>%{{y:.0f}} bpm<extra></extra>",
+        ))
+    fig3.update_layout(**LAYOUT, height=320,
+                       xaxis=dict(**_AXIS, title="Zone 100m"),
+                       yaxis=dict(**_AXIS, title="FC moy (bpm)"))
+    st.plotly_chart(fig3, use_container_width=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  17 — VENT & DIRECTION
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "17 · Vent & Direction":
+    st.title("Vent & Conditions météo détaillées")
+
+    has_meteo = "temperature_c" in df.columns and df["temperature_c"].notna().any()
+    if not has_meteo:
+        st.warning("Données météo non disponibles.")
+        st.stop()
+
+    df_meteo_all = df_all.drop_duplicates("Séance").sort_values("Séance")
+
+    # ── Rose des vents par séance ──────────────────────────────────────────────
+    st.subheader("Direction du vent par séance")
+    st.caption("S1 & S3 : même force (23.6 km/h) mais directions opposées — impact potentiel différent sur le parcours")
+
+    fig_wind = go.Figure()
+    for _, row in df_meteo_all.iterrows():
+        if pd.isna(row.get("vent_direction_deg")):
+            continue
+        angle = row["vent_direction_deg"]
+        force = row["vent_kmh"]
+        seance_n = int(row["Séance"])
+        # Tracé radial
+        fig_wind.add_trace(go.Scatterpolar(
+            r=[0, force],
+            theta=[angle, angle],
+            mode="lines+markers",
+            name=f"S{seance_n} ({row['Date']})",
+            line=dict(width=3),
+            marker=dict(size=[4, 12]),
+            hovertemplate=f"S{seance_n} · {angle}° · {force:.1f} km/h<extra></extra>",
+        ))
+    fig_wind.update_layout(
+        **LAYOUT, height=400,
+        polar=dict(
+            bgcolor="#1a1a1a",
+            radialaxis=dict(visible=True, range=[0, 30], tickcolor="#555",
+                            gridcolor="#333", color="#888"),
+            angularaxis=dict(direction="clockwise", rotation=90,
+                             tickmode="array",
+                             tickvals=[0, 45, 90, 135, 180, 225, 270, 315],
+                             ticktext=["N", "NE", "E", "SE", "S", "SO", "O", "NO"],
+                             tickcolor="#555", gridcolor="#333", color="#e0e0e0"),
+        ),
+    )
+    st.plotly_chart(fig_wind, use_container_width=True)
+
+    st.divider()
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Tableau météo complet par séance")
+        meteo_table = df_meteo_all[[
+            "Séance", "Date", "temperature_c", "temperature_ressentie_c",
+            "humidite_pct", "vent_kmh", "vent_direction_deg", "precipitation_mm"
+        ]].copy()
+        meteo_table.columns = ["Séance", "Date", "Temp (°C)", "Ressenti (°C)",
+                               "Humidité (%)", "Vent (km/h)", "Dir. vent (°)", "Précip. (mm)"]
+        st.dataframe(meteo_table.set_index("Séance"), use_container_width=True)
+
+    with col2:
+        st.subheader("Corrélation vent × performance")
+        st.caption("Vent fort = temps plus lent ?")
+        df_vent = df_all.dropna(subset=["vent_kmh", "Temps400m_s"])
+        fig2 = go.Figure()
+        for coureur in sorted(df_all["Coureur"].unique()):
+            dc = df_vent[df_vent["Coureur"] == coureur]
+            if dc.empty:
+                continue
+            fig2.add_trace(go.Scatter(
+                x=dc["vent_kmh"], y=dc["Temps400m_s"],
+                name=coureur, mode="markers",
+                marker=dict(size=14, color=COLORS.get(coureur, "#888"),
+                            line=dict(width=2, color="#0d0d0d")),
+                text=dc["Temps400m_str"],
+                customdata=dc["Séance"],
+                hovertemplate=f"<b>{coureur}</b> · S%{{customdata}}<br>"
+                              f"Vent : %{{x:.1f}} km/h · %{{text}}<extra></extra>",
+            ))
+        add_trendline(fig2, df_vent["vent_kmh"], df_vent["Temps400m_s"])
+        fig2.update_layout(**LAYOUT, height=360,
+                           xaxis=dict(**_AXIS, title="Vent (km/h)"),
+                           yaxis=dict(**_AXIS, autorange="reversed", title="Temps 400m (s)"))
+        st.plotly_chart(fig2, use_container_width=True)
+
+    st.divider()
+    st.subheader("Indice de confort — Température ressentie vs Temps 400m")
+    df_res = df_all.dropna(subset=["temperature_ressentie_c", "Temps400m_s"])
+    fig3 = go.Figure()
+    for coureur in sorted(df_all["Coureur"].unique()):
+        dc = df_res[df_res["Coureur"] == coureur]
+        if dc.empty:
+            continue
+        fig3.add_trace(go.Scatter(
+            x=dc["temperature_ressentie_c"], y=dc["Temps400m_s"],
+            name=coureur, mode="markers",
+            marker=dict(size=14, color=COLORS.get(coureur, "#888"),
+                        line=dict(width=2, color="#0d0d0d")),
+            text=dc["Temps400m_str"],
+            customdata=dc["Séance"],
+            hovertemplate=f"<b>{coureur}</b> · S%{{customdata}}<br>"
+                          f"Ressenti : %{{x:.1f}}°C · %{{text}}<extra></extra>",
+        ))
+    add_trendline(fig3, df_res["temperature_ressentie_c"], df_res["Temps400m_s"])
+    fig3.update_layout(**LAYOUT, height=340,
+                       xaxis=dict(**_AXIS, title="Température ressentie (°C)"),
+                       yaxis=dict(**_AXIS, autorange="reversed", title="Temps 400m (s)"))
+    st.plotly_chart(fig3, use_container_width=True)

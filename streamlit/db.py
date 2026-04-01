@@ -1,15 +1,14 @@
 """
-db.py
-─────
-Gestion de la source de données pour le dashboard Streamlit.
+db.py — Sources de données pour le dashboard SAÉ Running
+─────────────────────────────────────────────────────────
+Source principale : data/fit/tour2_results.csv  (métriques Tour 2 extraites des FIT)
+Source secondaire : data/meteo.json             (Open-Meteo, 1 ligne par séance)
+FIT raw          : data/fit/{Coureur}_s{N}.csv  (second-par-second, pour profils)
 
-- Si PostgreSQL est configuré et accessible → lit depuis la BDD
-- Sinon → fallback sur les fichiers CSV locaux
-
-Cela permet de développer localement sans BDD
-et de basculer automatiquement sur PostgreSQL une fois sur la VM.
+Fallback PostgreSQL conservé pour la VM.
 """
 
+import json
 import os
 from pathlib import Path
 
@@ -18,56 +17,211 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-# ── Helpers de conversion (réutilisés depuis ingest_csv) ──────────────────────
+ROOT = Path(__file__).parent.parent
+FIT_DIR = ROOT / "data" / "fit"
 
-def pace_to_seconds(value: str):
-    s = str(value).strip()
-    if s in ("--", "", "nan"):
-        return None
-    parts = s.split(":")
-    try:
-        return int(parts[0]) * 60 + int(parts[1])
-    except (ValueError, IndexError):
-        return None
+COUREURS_CONNUS = ["Adrien", "Nathan", "Khalil", "Arthur"]
+POIDS = {"Arthur": 70, "Khalil": 80, "Adrien": 64, "Nathan": 76}
+
+# Dates officielles des séances
+SEANCE_DATES = {1: "2026-03-12", 2: "2026-03-19", 3: "2026-03-25", 4: "2026-03-30"}
 
 
-def duration_to_seconds(value: str):
-    import re
-    s = str(value).strip()
-    s = re.sub(r"\.\d+$", "", s)
-    parts = s.split(":")
-    try:
-        if len(parts) == 3:
-            return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
-        if len(parts) == 2:
-            return int(parts[0]) * 60 + int(parts[1])
-    except (ValueError, IndexError):
-        return None
+# ── Helpers ────────────────────────────────────────────────────────────────────
 
-
-def clean_int(value):
-    try:
-        return int(str(value).replace(",", "").replace(" ", ""))
-    except (ValueError, TypeError):
-        return None
-
-
-def seconds_to_pace_str(s):
-    if s is None or (hasattr(s, '__class__') and s != s):
+def pace_str(s):
+    if s is None or pd.isna(s):
         return "N/A"
     try:
-        m = int(s) // 60
-        sec = int(s) % 60
-        return f"{m}:{sec:02d}/km"
+        return f"{int(s)//60}:{int(s)%60:02d}/km"
     except Exception:
         return "N/A"
 
 
-# ── Source PostgreSQL ──────────────────────────────────────────────────────────
+def time_400m(duree_s, distance_m):
+    """Normalise la durée à 400m exact."""
+    if pd.isna(duree_s) or pd.isna(distance_m) or distance_m == 0:
+        return None
+    return duree_s * (400 / distance_m)
+
+
+def _parse_fit_csv(path: Path) -> pd.DataFrame:
+    """Parse un fichier FIT CSV Garmin (format décimal français)."""
+    df = pd.read_csv(path)
+    for c in df.columns:
+        if df[c].dtype == object:
+            try:
+                df[c] = df[c].str.replace(",", ".", regex=False)
+            except AttributeError:
+                pass
+    df["ts"] = pd.to_datetime(df["timestamp"], dayfirst=True, errors="coerce")
+    for col in ["enhanced_speed", "heart_rate", "cadence", "power", "distance",
+                "enhanced_altitude", "grade_adjusted_speed",
+                "position_lat", "position_long"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    return df
+
+
+# ── Tour 2 results ─────────────────────────────────────────────────────────────
+
+def load_tour2() -> pd.DataFrame:
+    """Charge tour2_results.csv et merge avec météo."""
+    path = FIT_DIR / "tour2_results.csv"
+    df = pd.read_csv(path)
+
+    # Colonnes normalisées
+    df = df.rename(columns={
+        "coureur": "Coureur",
+        "seance":  "Séance",
+        "duree_s": "Durée_s",
+        "distance_m": "Distance_m",
+        "allure_s_km": "Allure_s",
+        "allure_str": "Allure_str",
+        "meilleure_allure_s_km": "Sprint_s",
+        "meilleure_allure_str": "Sprint_str",
+        "fc_moyenne": "FC_moy",
+        "fc_max": "FC_max",
+        "cadence_moyenne_spm": "Cadence_spm",
+        "puissance_moyenne_w": "Puissance_w",
+    })
+
+    df["Temps400m_s"] = df.apply(lambda r: time_400m(r["Durée_s"], r["Distance_m"]), axis=1)
+    df["Temps400m_str"] = df["Temps400m_s"].apply(
+        lambda s: f"{int(s)//60}:{int(s)%60:02d}" if pd.notna(s) else "N/A"
+    )
+    df["Date"] = df["Séance"].map(SEANCE_DATES)
+
+    # Merge météo
+    meteo_path = ROOT / "data" / "meteo.json"
+    if meteo_path.exists():
+        meteo = pd.DataFrame(json.loads(meteo_path.read_text()))
+        meteo = meteo.rename(columns={"seance": "Séance"})
+        df = df.merge(meteo, on="Séance", how="left")
+
+    return df.sort_values(["Séance", "Allure_s"]).reset_index(drop=True)
+
+
+# ── FIT segment loader ────────────────────────────────────────────────────────
+
+def load_fit_segment(coureur: str, seance: int,
+                     window: str = "tour2",
+                     post_minutes: float = 4.0) -> pd.DataFrame | None:
+    """
+    Charge le segment FIT d'un coureur pour une séance.
+
+    window :
+      "tour2"       → uniquement le Tour 2 (effort max)
+      "post_tour2"  → post_minutes après la fin du Tour 2 (récupération)
+      "full"        → activité complète
+    """
+    fit_path = FIT_DIR / f"{coureur}_s{seance}.csv"
+    if not fit_path.exists():
+        return None
+
+    df = _parse_fit_csv(fit_path)
+    if df["ts"].isna().all():
+        return None
+
+    # Récupère les bornes Tour 2 depuis tour2_results.csv
+    t2_path = FIT_DIR / "tour2_results.csv"
+    t2 = pd.read_csv(t2_path)
+    row = t2[(t2["coureur"] == coureur) & (t2["seance"] == seance)]
+    if row.empty and window != "full":
+        return None
+
+    if window != "full" and not row.empty:
+        date = df["ts"].dropna().iloc[0].date()
+        debut = pd.Timestamp(f"{date} {row.iloc[0]['tour2_debut']}")
+        fin   = pd.Timestamp(f"{date} {row.iloc[0]['tour2_fin']}")
+
+        if window == "tour2":
+            mask = (df["ts"] >= debut) & (df["ts"] <= fin)
+            ref_ts = debut
+        else:  # post_tour2
+            post_end = fin + pd.Timedelta(minutes=post_minutes)
+            mask = (df["ts"] > fin) & (df["ts"] <= post_end)
+            ref_ts = fin
+    else:
+        mask = pd.Series([True] * len(df), index=df.index)
+        ref_ts = df["ts"].dropna().iloc[0]
+
+    seg = df[mask].copy()
+    if seg.empty:
+        return None
+
+    seg["t_rel"] = (seg["ts"] - ref_ts).dt.total_seconds()
+    if "distance" in seg.columns and seg["distance"].notna().any():
+        seg["dist_rel"] = seg["distance"] - seg["distance"].iloc[0]
+    else:
+        seg["dist_rel"] = seg["t_rel"]  # fallback
+
+    return seg.reset_index(drop=True)
+
+
+# ── Détection des 3 tours ────────────────────────────────────────────────────
+
+def load_all_tours(coureur: str, seance: int) -> dict | None:
+    """
+    Divise l'activité en 3 tours en utilisant les bornes du Tour 2 déjà connues.
+    Tour 1 = avant Tour 2 | Tour 2 = effort max | Tour 3 = après Tour 2.
+    Returns dict: {'tour1': df, 'tour2': df, 'tour3': df} ou None si données manquantes.
+    """
+    fit_path = FIT_DIR / f"{coureur}_s{seance}.csv"
+    if not fit_path.exists():
+        return None
+
+    df = _parse_fit_csv(fit_path)
+    df = df.dropna(subset=["enhanced_speed"]).copy()
+    if df.empty:
+        return None
+
+    df["t_act"] = (df["ts"] - df["ts"].iloc[0]).dt.total_seconds()
+
+    # Récupère les bornes Tour 2 depuis tour2_results.csv
+    t2_path = FIT_DIR / "tour2_results.csv"
+    t2 = pd.read_csv(t2_path)
+    row = t2[(t2["coureur"] == coureur) & (t2["seance"] == seance)]
+    if row.empty:
+        return None
+
+    date = df["ts"].dropna().iloc[0].date()
+    debut_t2 = pd.Timestamp(f"{date} {row.iloc[0]['tour2_debut']}")
+    fin_t2   = pd.Timestamp(f"{date} {row.iloc[0]['tour2_fin']}")
+
+    def make_seg(mask, num):
+        seg = df[mask].copy()
+        if seg.empty or seg["t_act"].max() - seg["t_act"].min() < 15:
+            return None
+        # Filtre vitesse > 1.0 m/s (exclut pauses)
+        seg = seg[seg["enhanced_speed"] > 1.0].copy()
+        if seg.empty:
+            return None
+        seg["t_lap"] = seg["t_act"] - seg["t_act"].iloc[0]
+        seg["tour_num"] = num
+        if "distance" in seg.columns:
+            seg["dist_lap"] = seg["distance"] - seg["distance"].iloc[0]
+        return seg.reset_index(drop=True)
+
+    t1 = make_seg(df["ts"] < debut_t2, 1)
+    t2_seg = make_seg((df["ts"] >= debut_t2) & (df["ts"] <= fin_t2), 2)
+    t3 = make_seg(df["ts"] > fin_t2, 3)
+
+    result = {}
+    if t1 is not None:
+        result["tour1"] = t1
+    if t2_seg is not None:
+        result["tour2"] = t2_seg
+    if t3 is not None:
+        result["tour3"] = t3
+
+    return result if len(result) >= 2 else None
+
+
+# ── PostgreSQL (VM) ────────────────────────────────────────────────────────────
 
 def _load_from_postgres() -> pd.DataFrame:
     import psycopg2
-
     conn = psycopg2.connect(
         host=os.getenv("DB_HOST", "localhost"),
         port=int(os.getenv("DB_PORT", 5432)),
@@ -75,169 +229,30 @@ def _load_from_postgres() -> pd.DataFrame:
         user=os.getenv("DB_USER", "postgres"),
         password=os.getenv("DB_PASSWORD", ""),
     )
-
     query = """
-        SELECT
-            coureur,
-            seance,
-            date_seance,
-            allure_moyenne_s,
-            meilleure_allure_s,
-            distance_km,
-            duree_secondes,
-            fc_moyenne,
-            fc_maximale,
-            cadence_moyenne,
-            foulee_moyenne_m,
-            puissance_moyenne_w,
-            te_aerobie,
-            calories,
-            temperature_c,
-            temperature_ressentie_c,
-            humidite_pct,
-            vent_vitesse_kmh,
-            vent_direction_deg,
-            precipitation_mm,
-            pression_hpa,
-            uv_index
-        FROM performances_avec_meteo
-        ORDER BY seance, allure_moyenne_s
+        SELECT coureur AS "Coureur", seance AS "Séance", date_seance AS "Date",
+               allure_moyenne_s AS "Allure_s", meilleure_allure_s AS "Sprint_s",
+               distance_km*1000 AS "Distance_m", duree_secondes AS "Durée_s",
+               fc_moyenne AS "FC_moy", fc_maximale AS "FC_max",
+               cadence_moyenne AS "Cadence_spm",
+               puissance_moyenne_w AS "Puissance_w",
+               temperature_c, humidite_pct, vent_vitesse_kmh AS vent_kmh,
+               precipitation_mm
+        FROM performances_avec_meteo ORDER BY seance, allure_moyenne_s
     """
-
     df = pd.read_sql(query, conn)
     conn.close()
-
-    df["Durée_min"] = df["duree_secondes"] / 60
-    df["Allure_str"] = df["allure_moyenne_s"].apply(seconds_to_pace_str)
-    df["Meilleure_allure_str"] = df["meilleure_allure_s"].apply(seconds_to_pace_str)
-
-    # Renommage pour compatibilité avec app.py
-    df = df.rename(columns={
-        "coureur":           "Coureur",
-        "seance":            "Séance",
-        "date_seance":       "Date",
-        "allure_moyenne_s":  "Allure_s",
-        "meilleure_allure_s":"Meilleure_allure_s",
-        "distance_km":       "Distance",
-        "duree_secondes":    "Durée_s",
-        "fc_moyenne":        "FC_moy",
-        "fc_maximale":       "FC_max",
-        "cadence_moyenne":   "Cadence_moy",
-        "foulee_moyenne_m":  "Foulée_moy",
-        "puissance_moyenne_w":"Puissance_moy",
-        "te_aerobie":        "TE",
-        "calories":          "Calories",
-        "temperature_c":         "Météo_Temp",
-        "temperature_ressentie_c":"Météo_TempRessentie",
-        "humidite_pct":          "Météo_Humidite",
-        "vent_vitesse_kmh":      "Météo_Vent",
-        "precipitation_mm":      "Météo_Precipitation",
-    })
-
-    return df
-
-
-# ── Source CSV (fallback) ──────────────────────────────────────────────────────
-
-COUREURS_CONNUS = ["Adrien", "Nathan", "Khalil", "Arthur"]
-
-
-def _get_coureur(titre: str) -> str | None:
-    for nom in COUREURS_CONNUS:
-        if nom.lower() in str(titre).lower():
-            return nom
-    return None
-
-
-def _col(row, *noms):
-    for nom in noms:
-        val = row.get(nom)
-        if val is not None and str(val).strip() not in ("--", "", "nan"):
-            return val
-    return None
-
-
-def _parse_seance(csv_path: Path, numero: int) -> pd.DataFrame:
-    import re
-    df = pd.read_csv(csv_path)
-    df.columns = df.columns.str.strip()
-
-    # Garder uniquement les courses à pied des 4 coureurs
-    df = df[df["Type d'activité"].str.lower().str.contains("course", na=False)].copy()
-    df["Coureur"] = df["Titre"].apply(_get_coureur)
-    df = df[df["Coureur"].notna()].copy()
-
-    if df.empty:
-        return pd.DataFrame()
-
-    df["Séance"] = numero
-    df["Date"] = df["Date"].str[:10]
-
-    # Allure — deux noms de colonnes possibles selon le type d'export
-    df["Allure_s"] = df.apply(lambda r: pace_to_seconds(_col(r, "Allure moyenne", "Vitesse moyenne")), axis=1)
-    df["Meilleure_allure_s"] = df.apply(lambda r: pace_to_seconds(_col(r, "Meilleure allure", "Vitesse max")), axis=1)
-    df["Allure_str"] = df["Allure_s"].apply(seconds_to_pace_str)
-    df["Meilleure_allure_str"] = df["Meilleure_allure_s"].apply(seconds_to_pace_str)
-
-    df["Durée_s"] = df["Durée"].apply(duration_to_seconds)
-    df["Durée_min"] = df["Durée_s"] / 60
-    df["Distance"] = pd.to_numeric(df["Distance"], errors="coerce")
-    df["Calories"] = pd.to_numeric(df["Calories"], errors="coerce")
-    df["FC_moy"] = pd.to_numeric(df["Fréquence cardiaque moyenne"], errors="coerce")
-    df["FC_max"] = pd.to_numeric(df["Fréquence cardiaque maximale"], errors="coerce")
-
-    # Cadence — deux noms possibles
-    df["Cadence_moy"] = df.apply(
-        lambda r: clean_int(_col(r, "Cadence de course moyenne", "Cadence de vélo moyenne")), axis=1
+    df["Allure_str"] = df["Allure_s"].apply(pace_str)
+    df["Sprint_str"]  = df["Sprint_s"].apply(pace_str)
+    df["Temps400m_s"] = df.apply(lambda r: time_400m(r["Durée_s"], r["Distance_m"]), axis=1)
+    df["Temps400m_str"] = df["Temps400m_s"].apply(
+        lambda s: f"{int(s)//60}:{int(s)%60:02d}" if pd.notna(s) else "N/A"
     )
-    df["Foulée_moy"] = pd.to_numeric(df["Longueur moyenne des foulées"], errors="coerce")
-    df["Puissance_moy"] = pd.to_numeric(df["Puissance moyenne"], errors="coerce")
-    df["TE"] = pd.to_numeric(df["TE aérobie"], errors="coerce")
-    df["Pas"] = df["Pas"].apply(clean_int)
-
-    for c in ["Météo_Temp", "Météo_TempRessentie", "Météo_Humidite", "Météo_Vent", "Météo_Precipitation"]:
-        df[c] = None
-
     return df
 
-
-def _load_from_csv() -> pd.DataFrame:
-    import re
-    root = Path(__file__).parent.parent
-
-    # Détecter tous les SeanceN.csv à la racine ou dans data/
-    csv_files = sorted([
-        *root.glob("Seance*.csv"),
-        *root.glob("data/Seance*.csv"),
-    ])
-
-    frames = []
-    for csv_path in csv_files:
-        match = re.search(r"(\d+)", csv_path.stem)
-        numero = int(match.group(1)) if match else 0
-        frame = _parse_seance(csv_path, numero)
-        if not frame.empty:
-            frames.append(frame)
-
-    if not frames:
-        return pd.DataFrame()
-
-    df = pd.concat(frames, ignore_index=True)
-    # Garmin exporte en cumulatif : Seance2.csv contient aussi les activités de Seance1.
-    # On garde la première occurrence (séance la plus basse) pour chaque (Coureur, Date).
-    df = df.sort_values("Séance").drop_duplicates(subset=["Coureur", "Date"], keep="first").reset_index(drop=True)
-    return df
-
-
-# ── Point d'entrée public ──────────────────────────────────────────────────────
 
 def load_data() -> tuple[pd.DataFrame, str]:
-    """
-    Retourne (dataframe, source) où source vaut "postgresql" ou "csv".
-    """
     try:
-        df = _load_from_postgres()
-        return df, "postgresql"
+        return _load_from_postgres(), "postgresql"
     except Exception:
-        df = _load_from_csv()
-        return df, "csv"
+        return load_tour2(), "csv"

@@ -11,19 +11,25 @@ IUT Reims-Châlons-Charleville · 2025-2026
 
 > Les conditions environnementales (météo) ont-elles un impact mesurable sur les performances de course à pied, et cet impact varie-t-il selon les coureurs ?
 
-Pour y répondre, nous collectons nos propres données de course (Garmin) et les croisons avec des données météorologiques (Open-Meteo) au moment et au lieu exact de chaque séance.
+Pour y répondre, nous collectons nos propres données de course (Garmin FIT second-par-second) et les croisons avec des données météorologiques (Open-Meteo) au moment et au lieu exact de chaque séance. Toutes les analyses portent sur le **Tour 2 uniquement** (400m à effort maximal), extrait automatiquement des fichiers FIT.
 
 ---
 
 ## Architecture du pipeline
 
 ```
-[Export Garmin CSV]
+[Garmin FIT CSV (second-par-second)]
+        │
+        ▼
+[scripts/extract_tour2.py] ──► [data/fit/tour2_results.csv]
+        │
+[Export Garmin CSV résumé]
         │
         ▼
 [scripts/ingest_csv.py] ──────────────────────┐
                                                ▼
 [API Open-Meteo] ──► [scripts/ingest_meteo.py] ──► [PostgreSQL]
+[data/meteo.json] ◄──────────────────────────────── (fallback local)
                                                          │
                               ┌──────────────────────────┤
                               ▼                          ▼
@@ -39,24 +45,30 @@ Le script `scripts/pipeline.py` orchestre l'ensemble et est déclenché automati
 ```
 SAE_data/
 ├── data/
-│   ├── SeanceN.csv          # Données Garmin brutes (déposées ici pour ingestion)
-│   ├── processed/           # CSV archivés après ingestion
-│   └── conditions.json      # Conditions physiologiques (local uniquement, non commité)
+│   ├── Seance1.csv … Seance4.csv   # Résumés Garmin bruts (1 ligne/coureur/séance)
+│   ├── fit/                         # Fichiers FIT second-par-second
+│   │   ├── {Coureur}_s{N}.csv      # Ex: Khalil_s2.csv
+│   │   └── tour2_results.csv       # Métriques Tour 2 extraites (source principale dashboard)
+│   ├── meteo.json                   # Météo Open-Meteo par séance (fallback sans PostgreSQL)
+│   └── processed/                  # CSV archivés après ingestion
 ├── database/
-│   └── schema.sql           # Schéma PostgreSQL (5 tables + vue)
+│   └── schema.sql                  # Schéma PostgreSQL (5 tables + 1 vue)
 ├── scripts/
-│   ├── ingest_csv.py        # Ingestion CSV Garmin → PostgreSQL
-│   ├── ingest_meteo.py      # Ingestion API Open-Meteo → PostgreSQL
-│   ├── fetch_garmin.py      # Export activités Garmin API → CSV
-│   └── pipeline.py          # Orchestrateur principal (cron)
+│   ├── extract_tour2.py            # Extraction Tour 2 depuis fichiers FIT
+│   ├── ingest_csv.py               # Ingestion CSV Garmin → PostgreSQL
+│   ├── ingest_meteo.py             # Ingestion API Open-Meteo → PostgreSQL
+│   ├── fetch_garmin.py             # Export activités Garmin API → CSV
+│   └── pipeline.py                 # Orchestrateur principal (cron)
 ├── streamlit/
-│   ├── app.py               # Dashboard interactif (6 pages)
-│   ├── db.py                # Couche données (PostgreSQL + fallback CSV automatique)
-│   └── requirements.txt     # Dépendances Python
+│   ├── app.py                      # Dashboard interactif (17 sections)
+│   ├── db.py                       # Couche données (PostgreSQL + fallback CSV/JSON)
+│   └── requirements.txt
+├── POWER_BI/
+│   └── SAE_S4.pbix                 # Dashboard Power BI
 ├── cron/
-│   └── crontab.example      # Configuration cron à adapter sur la VM
-├── logs/                    # Journaux d'exécution (ignoré par git)
-├── .env.example             # Modèle de configuration BDD
+│   └── crontab.example             # Configuration cron à adapter sur la VM
+├── logs/                           # Journaux d'exécution (ignoré par git)
+├── .env.example                    # Modèle de configuration BDD
 └── README.md
 ```
 
@@ -84,18 +96,16 @@ duree_secondes                   humidite_pct
 allure_moyenne_s                 vent_vitesse_kmh / direction
 meilleure_allure_s               precipitation_mm
 fc_moyenne / fc_maximale         pression_hpa / uv_index
-cadence_moyenne                  couverture_nuageuse_pct
-foulee_moyenne_m                 vpd_kpa
-puissance_moyenne_w
-te_aerobie                conditions_coureur
-...                       ──────────────────
-                          id (PK)
-                          coureur_id (FK)
-                          seance_id  (FK)
-                          a_jeun / heures_sommeil
-                          etat_general (1-5)
-                          courbatures / dernier_repas_h
-                          notes
+cadence_moyenne
+foulee_moyenne_m                 conditions_coureur
+puissance_moyenne_w              ──────────────────
+te_aerobie                       id (PK)
+...                              coureur_id (FK)
+                                 seance_id  (FK)
+                                 a_jeun / heures_sommeil
+                                 etat_general (1-5)
+                                 courbatures / dernier_repas_h
+                                 notes
 
 Vue : performances_avec_meteo
 → Jointure activites + seances + coureurs + meteo + conditions_coureur
@@ -106,39 +116,67 @@ Vue : performances_avec_meteo
 
 ## Sources de données
 
-### Source 1 — Garmin Connect (CSV)
-Export depuis Garmin Connect après chaque séance.
-Format : CSV avec ~35 colonnes (allure, FC, cadence, puissance, foulée...).
+### Source 1 — Garmin Connect (FIT + CSV)
 
-> **Note :** Toutes les activités sont enregistrées sur le compte Garmin d'Arthur (1m88, 70 kg).
-> Les calories sont automatiquement corrigées par le poids réel de chaque coureur dans le dashboard.
-> | Coureur | Poids | Facteur correction calories |
-> |---------|-------|----------------------------|
+Deux niveaux d'export depuis Garmin Connect après chaque séance :
+
+**CSV résumé** — 1 ligne par activité avec métriques globales (allure moy, FC moy, distance...).
+> ⚠️ Ces métriques moyennent les 3 tours (échauffement + effort + récupération) et **sous-estiment massivement la performance réelle**.
+
+**FIT second-par-second** — 1 ligne par seconde avec vitesse instantanée, GPS, FC, cadence, puissance.
+> ✅ Source principale des analyses. Permet d'isoler le **Tour 2** (effort maximal ~400m).
+
+**Extraction automatique du Tour 2 (`scripts/extract_tour2.py`) :**
+- Détection du pic de vitesse dans le FIT
+- Seuil adaptatif : 75% du pic (évite de capturer l'échauffement)
+- Résultat : `data/fit/tour2_results.csv` — métriques réelles du 400m rapide
+
+> **Note :** Toutes les activités sont enregistrées sur le compte Garmin d'Arthur (70 kg).
+> Les calories et puissance sont corrigées par le poids réel de chaque coureur.
+>
+> | Coureur | Poids | Facteur |
+> |---------|-------|---------|
 > | Arthur  | 70 kg | × 1.00 |
 > | Nathan  | 76 kg | × 1.09 |
 > | Khalil  | 80 kg | × 1.14 |
 > | Adrien  | 64 kg | × 0.91 |
 
-### Source 2 — Open-Meteo (API)
-API météo historique, **gratuite et sans clé API**.
+### Source 2 — Open-Meteo (API historique)
 
-Variables collectées : température, température ressentie, humidité, vent (vitesse/direction/rafales), précipitations, pression atmosphérique, indice UV, couverture nuageuse, VPD.
+API météo **gratuite et sans clé API**. Données horaires au lieu et à l'heure exact de chaque séance.
+
+Variables : température, température ressentie, humidité, vent (vitesse/direction/rafales), précipitations, pression atmosphérique, indice UV.
+
+En mode local (sans VM) : les données sont sauvegardées dans `data/meteo.json` et chargées directement par le dashboard.
 
 ---
 
-## Dashboard Streamlit — Pages
+## Dashboard Streamlit — 17 sections
 
-| Page | Contenu |
-|------|---------|
-| **Vue d'ensemble** | KPI par coureur, classement, records personnels |
-| **Performance** | Allure par séance, % progression, évolution temporelle, heatmap |
-| **Biomécanique** | Radar normalisé, cadence vs allure, foulée vs allure, efficacité cardio, TE, calories corrigées |
-| **Météo & Corrélations** | Scatter temp/allure, humidité/FC, heatmap corrélations (actif après PostgreSQL) |
-| **Tête-à-tête** | Comparaison directe de 2 coureurs sur toutes les métriques |
-| **Conditions & Contexte** | Saisie conditions physiologiques, biais identifiés |
+Toutes les métriques sont calculées sur le **Tour 2 uniquement**.
 
-> Le dashboard fonctionne en **mode CSV** (sans PostgreSQL) avec fallback automatique.
-> La page Météo s'active automatiquement une fois les données en base.
+| # | Section | Contenu |
+|---|---------|---------|
+| 1 | KPI & Classement | Records personnels (temps 400m, FC max, cadence, puissance) |
+| 2 | Temps 400m & Météo | Double axe temps/température, scatter corrélation |
+| 3 | Puissance & Effort | Évolution watts, FC, efficacité cardiovasculaire |
+| 4 | Face-à-tête | Comparaison 2 coureurs : tableau + radar normalisé |
+| 5 | Profil de vitesse | Courbe m/s second-par-second sur le 400m |
+| 6 | Accélérations | Dérivée de vitesse : départ fort / ralentissement fin |
+| 7 | Récupération cardiaque | Descente FC après Tour 2, seuil ajustable |
+| 8 | Heatmap Météo | Température × coureur × performance |
+| 9 | Progression | Évolution % vs séance 1 sur 4 séances |
+| 10 | Carte GPS animée | Simulation positions sur parcours réel (slider + animation Plotly) |
+| 11 | Tour 1 / 2 / 3 | Comparaison échauffement / effort / récupération |
+| 12 | Splits 100m | Stratégie de course : temps par tranche de 100m |
+| 13 | Distribution vitesses | Histogramme + violin + zones de vitesse |
+| 14 | Allure instantanée | Courbe min/km avec axe lisible |
+| 15 | Puissance W/kg | Correction biais poids, watts bruts vs relatifs |
+| 16 | FC vs Distance | Réponse cardiaque selon position sur le 400m |
+| 17 | Vent & Direction | Rose des vents par séance, corrélation vent/performance |
+
+> Le dashboard fonctionne en **mode local sans PostgreSQL** (fallback automatique sur `tour2_results.csv` + `meteo.json`).
+> La connexion PostgreSQL s'active automatiquement une fois les variables `.env` configurées sur la VM.
 
 ---
 
@@ -184,16 +222,16 @@ cp .env.example .env
 ### 6. Ingérer les données
 
 ```bash
-# Déposer les CSV dans data/ puis lancer le pipeline
-cp Seance1.csv data/
-cp Seance2.csv data/
+# Déposer les FIT CSV dans data/fit/ puis extraire le Tour 2
+python scripts/extract_tour2.py
+
+# Ingérer les CSV résumés et récupérer la météo
 python scripts/pipeline.py
 ```
 
 ### 7. Configurer le cron
 
 ```bash
-# Éditer cron/crontab.example avec les bons chemins
 crontab cron/crontab.example
 ```
 
@@ -205,30 +243,30 @@ streamlit run streamlit/app.py --server.port 8501
 
 ---
 
+## Séances réalisées
+
+| Séance | Date | Heure | Conditions météo | Statut |
+|--------|------|-------|-----------------|--------|
+| S1 | 12/03/2026 | ~17h30 | 12.5°C · vent 23.6 km/h (SO) · sec | ✅ FIT + météo |
+| S2 | 19/03/2026 | ~15h00 | 15.4°C · vent 15.1 km/h (NE) · sec | ✅ FIT + météo |
+| S3 | 25/03/2026 | ~18h30 | 5.3°C · vent 23.6 km/h (ONO) · 1.4mm pluie | ✅ FIT + météo (Khalil absent) |
+| S4 | 30/03/2026 | ~09h30 | 7.8°C · vent 16.7 km/h (ONO) · humidité 87% | ✅ FIT + météo |
+
+**Coordonnées GPS :** 49.240841°N, 4.054274°E — Parc de Champagne, Reims
+
+---
+
 ## Choix technologiques
 
 | Composant | Technologie | Justification |
 |-----------|-------------|---------------|
-| Base de données | **PostgreSQL** | Standard industrie, transactions ACID, connecteur Power BI natif, déploiement VM simple |
-| Ingestion | **Python + pandas** | Parsing CSV flexible, appels API simples, écosystème data riche |
-| API météo | **Open-Meteo** | Gratuit, sans clé API, données historiques horaires précises, couverture France |
-| Automatisation | **Cron** | Natif Linux, simple, suffisant pour la fréquence de nos séances |
-| Dashboard 1 | **Streamlit** | Python natif, déploiement rapide, graphiques interactifs avec Plotly |
-| Dashboard 2 | **Power BI** | Connecteur PostgreSQL natif, visualisations avancées, adapté aux présentations |
-
----
-
-## Protocole de collecte
-
-**Format des séances :** 3×400m au Parc de Champagne, Reims
-**Coordonnées GPS :** 49.240841°N, 4.054274°E
-
-| Séance | Date | Objectif | Statut |
-|--------|------|----------|--------|
-| Séance 1 | 12/03/2026 | Baseline commune | ✅ Données intégrées |
-| Séance 2 | 19/03/2026 | Effet de l'heure | ✅ Données intégrées |
-| Séance 3 | À venir | Effet du terrain (plat vs dénivelé) | ⏳ |
-| Séance 4 | À venir | Reproductibilité (conditions séance 1) | ⏳ |
+| Base de données | **PostgreSQL** | Standard industrie, transactions ACID, connecteur Power BI natif |
+| Ingestion | **Python + pandas** | Parsing CSV flexible, appels API simples, format FIT natif |
+| Extraction Tour 2 | **Python (numpy)** | Seuil adaptatif 75% du pic — fonctionne quel que soit le niveau du coureur |
+| API météo | **Open-Meteo** | Gratuit, sans clé, données historiques horaires, couverture France |
+| Automatisation | **Cron** | Natif Linux, simple, adapté à la fréquence de nos séances |
+| Dashboard 1 | **Streamlit + Plotly** | Python natif, graphiques interactifs, animation GPS, déploiement immédiat |
+| Dashboard 2 | **Power BI** | Connecteur PostgreSQL natif, adapté aux présentations |
 
 ---
 
@@ -236,12 +274,14 @@ streamlit run streamlit/app.py --server.port 8501
 
 | Biais | Impact | Traitement |
 |-------|--------|-----------|
-| Profil Garmin unique (Arthur, 70 kg) | Calories, puissance, TE biaisés | ✅ Calories corrigées par poids réel |
-| À jeun / état physiologique variable | FC, énergie disponible | ✅ Collecté via page Conditions |
-| GPS précision ~3-5m sur 400m | Distance ±1-2% | ❌ Non corrigeable |
-| Métriques moyennées sur 3 tours | Mélange effort modéré + maximal + récup | ⚠️ Mentionné en note critique |
-| Apprentissage du parcours S1→S2 | Amélioration non liée à la condition physique | ⚠️ Mentionné en note critique |
-| Niveaux physiques hétérogènes | Comparaison absolue peu pertinente | ✅ % progression neutralise l'effet |
+| Profil Garmin unique (Arthur, 70 kg) | Calories, puissance, TE biaisés | ✅ Correction par poids réel (W/kg, kcal/km) |
+| Métriques CSV moyennées sur 3 tours | Sous-estime la performance réelle de 30 à 60% | ✅ Remplacement par extraction FIT Tour 2 |
+| Khalil absent séance 3 (maladie) | Données manquantes S3 | ✅ Exclu explicitement, mentionné dans les visu |
+| GPS précision ±3-5m sur 400m | Distance ±1% | ⚠️ Normalisation à 400m exact pour comparaisons |
+| Enregistrements à heures différentes (Adrien S4 à 12h34 vs groupe à 09h30) | Météo différente pour Adrien S4 | ⚠️ Mentionné en note critique |
+| Niveaux physiques hétérogènes | Comparaison absolue peu pertinente | ✅ Progression % neutralise l'effet |
+| Apprentissage du parcours S1→S2 | Amélioration non liée à la forme physique | ⚠️ Mentionné en note critique |
+| Anomalie FC Nathan S2 (moy 115 bpm) | Valeur aberrante probable capteur | ⚠️ Signalé dans les visualisations |
 
 ---
 
@@ -249,7 +289,7 @@ streamlit run streamlit/app.py --server.port 8501
 
 | Membre | Responsabilité |
 |--------|----------------|
-| Khalil | Pipeline ingestion CSV + cron + Dashboard Streamlit |
+| Khalil | Pipeline ingestion FIT + extraction Tour 2 + Dashboard Streamlit + VM/cron |
 | Adrien | Pipeline météo Open-Meteo + base de données PostgreSQL |
 | Nathan | Dashboard Power BI |
 | Arthur | Dashboard Power BI |
