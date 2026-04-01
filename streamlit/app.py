@@ -61,6 +61,147 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+# ── i18n ──────────────────────────────────────────────────────────────────────
+TRANSLATIONS = {
+    "Section": "Section",
+    "Séance(s)": "Session(s)",
+    "Coureur(s)": "Runner(s)",
+    "Aucune donnée pour la sélection.": "No data for current selection.",
+    "Source : **postgresql** · données **Tour 2** uniquement": "Source: **postgresql** · **Lap 2** data only",
+    "Source : **csv** · données **Tour 2** uniquement": "Source: **csv** · **Lap 2** data only",
+    "KPI — Meilleurs résultats Tour 2": "KPI — Best Lap 2 Results",
+    "Temps au 400m & Conditions météo": "400m Time & Weather Conditions",
+    "Puissance & Effort — Tour 2": "Power & Effort — Lap 2",
+    "Face-à-tête — Comparaison 2 coureurs": "Head-to-Head — 2 Runner Comparison",
+    "Profil de vitesse instantanée — Tour 2": "Instant Speed Profile — Lap 2",
+    "Analyse des accélérations — Tour 2": "Acceleration Analysis — Lap 2",
+    "Récupération cardiaque post-Tour 2": "Post-Lap 2 Heart Rate Recovery",
+    "Heatmap Météo × Performance": "Weather × Performance Heatmap",
+    "Courbes de progression — Tour 2": "Progress Curves — Lap 2",
+    "Carte GPS — Simulation Tour 2": "GPS Map — Lap 2 Simulation",
+    "Comparaison Tour 1 / Tour 2 / Tour 3": "Lap 1 / Lap 2 / Lap 3 Comparison",
+    "Splits 100m — Tour 2": "100m Splits — Lap 2",
+    "Distribution des vitesses — Tour 2": "Speed Distribution — Lap 2",
+    "Allure instantanée — Tour 2": "Instant Pace — Lap 2",
+    "Puissance relative — W/kg": "Relative Power — W/kg",
+    "FC vs Distance — Tour 2": "HR vs Distance — Lap 2",
+    "Vent & Conditions météo détaillées": "Wind & Detailed Weather Conditions",
+    "Données météo non disponibles.": "Weather data unavailable.",
+    "Données FIT non disponibles.": "FIT data unavailable.",
+    "Données GPS non disponibles.": "GPS data unavailable.",
+    "Séance": "Session",
+    "Métrique": "Metric",
+    "Coureur": "Runner",
+    "Coureur A": "Runner A",
+    "Coureur B": "Runner B",
+    "Records personnels sur l'ensemble des séances disponibles": "Personal records across all available sessions",
+    "Classement — Temps au 400m": "Ranking — 400m Time",
+    "FC max atteinte": "Max HR reached",
+    "Conditions par séance": "Conditions by session",
+    "Temps 400m & Température": "400m Time & Temperature",
+    "Temps 400m & Humidité / Vent": "400m Time & Humidity / Wind",
+    "Scatter : Température vs Temps au 400m": "Scatter: Temperature vs 400m Time",
+    "Puissance moyenne par séance": "Average power by session",
+    "Puissance max par séance": "Max power by session",
+    "FC moyenne Tour 2": "Lap 2 average HR",
+    "Efficacité cardiovasculaire": "Cardiovascular efficiency",
+    "Temps 400m séance par séance": "400m time session by session",
+    "Métriques clés — tableau comparatif": "Key metrics — comparison table",
+    "Radar — profil global (toutes séances)": "Radar — overall profile (all sessions)",
+    "Vitesse max instantanée — comparaison": "Instant max speed — comparison",
+    "Analyse des accélérations — Tour 2": "Acceleration analysis — Lap 2",
+    "Récupération cardiaque post-Tour 2": "Post-Lap 2 heart-rate recovery",
+    "Tableau de récupération": "Recovery table",
+    "Heatmap Température × Coureur": "Temperature × Runner heatmap",
+    "Scatter Température × Métrique": "Temperature × Metric scatter",
+    "Humidité × Temps 400m": "Humidity × 400m Time",
+    "Évolution absolue": "Absolute evolution",
+    "Progression vs Séance 1 (%)": "Progress vs Session 1 (%)",
+    "Tableau de synthèse — Temps 400m toutes séances": "Summary table — 400m Time all sessions",
+    "Direction du vent par séance": "Wind direction by session",
+    "Tableau météo complet par séance": "Full weather table by session",
+    "Corrélation vent × performance": "Wind × performance correlation",
+    "Vitesse max GPS par coureur": "GPS max speed by runner",
+    "Profil au fil du temps": "Profile over time",
+    "Moyenne par tour — tous coureurs": "Average per lap — all runners",
+    "Tableau récapitulatif — moyennes par tour": "Summary table — lap averages",
+    "Temps par 100m (secondes)": "Time per 100m (seconds)",
+    "Allure par 100m (min/km)": "Pace per 100m (min/km)",
+    "Analyse : qui gère le mieux son effort ?": "Analysis: who manages effort best?",
+    "Histogramme de vitesse (km/h)": "Speed histogram (km/h)",
+    "Violin plot — dispersion des vitesses": "Violin plot — speed dispersion",
+    "Zones de vitesse (% du temps par zone)": "Speed zones (% of time per zone)",
+    "Comparaison toutes séances — allure min atteinte": "All sessions comparison — minimum pace reached",
+    "W/kg par séance": "W/kg by session",
+    "Comparaison Watts bruts vs W/kg": "Raw watts vs W/kg comparison",
+    "FC vs Distance parcourue": "HR vs distance covered",
+    "FC vs Vitesse (scatter)": "HR vs speed (scatter)",
+    "Indice de confort — Température ressentie vs Temps 400m": "Comfort index — felt temperature vs 400m Time",
+    "X Axis": "X Axis",
+    "Time (s)": "Time (s)",
+    "Distance (m)": "Distance (m)",
+    "Mode": "Mode",
+    "Interactive slider": "Interactive slider",
+    "Plotly animation": "Plotly animation",
+}
+
+PAGE_KEYS = [
+    "kpi", "meteo", "power", "face", "speed", "accel", "recovery", "heatmap",
+    "progress", "gps", "laps", "splits", "dist", "pace", "wkg", "hrdist", "wind",
+]
+PAGE_LABELS = {
+    "fr": [
+        "1 · KPI & Classement",
+        "2 · Temps 400m & Météo",
+        "3 · Puissance & Effort",
+        "4 · Face-à-tête",
+        "5 · Profil de vitesse",
+        "6 · Accélérations",
+        "7 · Récupération cardiaque",
+        "8 · Heatmap Météo",
+        "9 · Progression",
+        "10 · Carte GPS animée",
+        "11 · Tour 1 / 2 / 3",
+        "12 · Splits 100m",
+        "13 · Distribution vitesses",
+        "14 · Allure instantanée",
+        "15 · Puissance W/kg",
+        "16 · FC vs Distance",
+        "17 · Vent & Direction",
+    ],
+    "en": [
+        "1 · KPI & Ranking",
+        "2 · 400m Time & Weather",
+        "3 · Power & Effort",
+        "4 · Head-to-Head",
+        "5 · Speed Profile",
+        "6 · Accelerations",
+        "7 · Heart Rate Recovery",
+        "8 · Weather Heatmap",
+        "9 · Progress",
+        "10 · Animated GPS Map",
+        "11 · Lap 1 / 2 / 3",
+        "12 · 100m Splits",
+        "13 · Speed Distribution",
+        "14 · Instant Pace",
+        "15 · Power W/kg",
+        "16 · HR vs Distance",
+        "17 · Wind & Direction",
+    ],
+}
+
+
+def T(text):
+    if not isinstance(text, str):
+        return text
+    if st.session_state.get("lang", "fr") == "fr":
+        return text
+    out = text
+    for fr, en in TRANSLATIONS.items():
+        out = out.replace(fr, en)
+    return out
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def add_trendline(fig, x, y, color="#666"):
@@ -95,49 +236,37 @@ df_all, source = get_data()
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
+    default_lang = st.session_state.get("lang", "fr")
+    lang = st.selectbox("Language", ["Français", "English"], index=1 if default_lang == "en" else 0)
+    st.session_state["lang"] = "en" if lang == "English" else "fr"
+
     st.markdown("## 🏃 SAÉ Running")
-    st.caption(f"Source : **{source}** · données **Tour 2** uniquement")
+    st.caption(T(f"Source : **{source}** · données **Tour 2** uniquement"))
     st.divider()
 
-    page = st.radio("Section", [
-        "1 · KPI & Classement",
-        "2 · Temps 400m & Météo",
-        "3 · Puissance & Effort",
-        "4 · Face-à-tête",
-        "5 · Profil de vitesse",
-        "6 · Accélérations",
-        "7 · Récupération cardiaque",
-        "8 · Heatmap Météo",
-        "9 · Progression",
-        "10 · Carte GPS animée",
-        "11 · Tour 1 / 2 / 3",
-        "12 · Splits 100m",
-        "13 · Distribution vitesses",
-        "14 · Allure instantanée",
-        "15 · Puissance W/kg",
-        "16 · FC vs Distance",
-        "17 · Vent & Direction",
-    ])
+    page_options = PAGE_LABELS[st.session_state["lang"]]
+    page = st.radio(T("Section"), page_options)
+    page_key = PAGE_KEYS[page_options.index(page)]
 
     st.divider()
     seances_dispo = sorted(df_all["Séance"].unique())
-    seances_sel = st.multiselect("Séance(s)", seances_dispo, default=seances_dispo)
-    coureurs_sel = st.multiselect("Coureur(s)", sorted(df_all["Coureur"].unique()),
+    seances_sel = st.multiselect(T("Séance(s)"), seances_dispo, default=seances_dispo)
+    coureurs_sel = st.multiselect(T("Coureur(s)"), sorted(df_all["Coureur"].unique()),
                                   default=sorted(df_all["Coureur"].unique()))
 
 df = df_all[df_all["Séance"].isin(seances_sel) & df_all["Coureur"].isin(coureurs_sel)].copy()
 
 if df.empty:
-    st.warning("Aucune donnée pour la sélection.")
+    st.warning(T("Aucune donnée pour la sélection."))
     st.stop()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  1 — KPI & CLASSEMENT
 # ══════════════════════════════════════════════════════════════════════════════
-if page == "1 · KPI & Classement":
-    st.title("KPI — Meilleurs résultats Tour 2")
-    st.caption("Records personnels sur l'ensemble des séances disponibles")
+if page_key == "kpi":
+    st.title(T("KPI — Meilleurs résultats Tour 2"))
+    st.caption(T("Records personnels sur l'ensemble des séances disponibles"))
 
     # Agrégation des records par coureur
     records = []
@@ -181,8 +310,8 @@ if page == "1 · KPI & Classement":
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("Classement — Temps au 400m")
-        st.caption("Meilleur temps normalisé à 400m exact · Tour 2 uniquement")
+        st.subheader(T("Classement — Temps au 400m"))
+        st.caption(T("Meilleur temps normalisé à 400m exact · Tour 2 uniquement"))
         df_r = pd.DataFrame(records).sort_values("best_t400")
         df_r["label"] = df_r["best_t400"].apply(fmt_time)
         fig = go.Figure(go.Bar(
@@ -198,8 +327,8 @@ if page == "1 · KPI & Classement":
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        st.subheader("FC max atteinte")
-        st.caption("Fréquence cardiaque maximale — Tour 2")
+        st.subheader(T("FC max atteinte"))
+        st.caption(T("Fréquence cardiaque maximale — Tour 2"))
         df_r2 = pd.DataFrame(records).dropna(subset=["fc_max"]).sort_values("fc_max", ascending=False)
         fig2 = go.Figure(go.Bar(
             x=df_r2["coureur"], y=df_r2["fc_max"],
@@ -215,19 +344,19 @@ if page == "1 · KPI & Classement":
 # ══════════════════════════════════════════════════════════════════════════════
 #  2 — TEMPS 400M & MÉTÉO
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "2 · Temps 400m & Météo":
-    st.title("Temps au 400m & Conditions météo")
+elif page_key == "meteo":
+    st.title(T("Temps au 400m & Conditions météo"))
 
     has_meteo = "temperature_c" in df.columns and df["temperature_c"].notna().any()
 
     if not has_meteo:
-        st.warning("Données météo non disponibles. Vérifiez `data/meteo.json`.")
+        st.warning(T("Données météo non disponibles. Vérifiez `data/meteo.json`."))
         st.stop()
 
     # Météo par séance (1 ligne par séance)
     df_meteo = df.drop_duplicates("Séance").sort_values("Séance")
 
-    st.subheader("Conditions par séance")
+    st.subheader(T("Conditions par séance"))
     mcols = st.columns(len(df_meteo))
     for i, (_, row) in enumerate(df_meteo.iterrows()):
         with mcols[i]:
@@ -247,8 +376,8 @@ elif page == "2 · Temps 400m & Météo":
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("Temps 400m & Température")
-        st.caption("Double axe : barres = temps au 400m · ligne = température")
+        st.subheader(T("Temps 400m & Température"))
+        st.caption(T("Double axe : barres = temps au 400m · ligne = température"))
 
         seances = sorted(df["Séance"].unique())
         fig = go.Figure()
@@ -285,7 +414,7 @@ elif page == "2 · Temps 400m & Météo":
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        st.subheader("Temps 400m & Humidité / Vent")
+        st.subheader(T("Temps 400m & Humidité / Vent"))
 
         fig3 = go.Figure()
         for coureur in coureurs_sel:
@@ -318,8 +447,8 @@ elif page == "2 · Temps 400m & Météo":
         st.plotly_chart(fig3, use_container_width=True)
 
     st.divider()
-    st.subheader("Scatter : Température vs Temps au 400m")
-    st.caption("Chaque point = 1 coureur × 1 séance · droite = tendance globale")
+    st.subheader(T("Scatter : Température vs Temps au 400m"))
+    st.caption(T("Chaque point = 1 coureur × 1 séance · droite = tendance globale"))
 
     df_s = df.dropna(subset=["temperature_c", "Temps400m_s"])
     fig4 = go.Figure()
@@ -348,14 +477,14 @@ elif page == "2 · Temps 400m & Météo":
 # ══════════════════════════════════════════════════════════════════════════════
 #  3 — PUISSANCE & EFFORT
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "3 · Puissance & Effort":
-    st.title("Puissance & Effort — Tour 2")
+elif page_key == "power":
+    st.title(T("Puissance & Effort — Tour 2"))
 
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("Puissance moyenne par séance")
-        st.caption("Watts moyens sur le Tour 2 · profil Arthur 70 kg (non corrigé)")
+        st.subheader(T("Puissance moyenne par séance"))
+        st.caption(T("Watts moyens sur le Tour 2 · profil Arthur 70 kg (non corrigé)"))
 
         fig = go.Figure()
         for coureur in coureurs_sel:
@@ -375,7 +504,7 @@ elif page == "3 · Puissance & Effort":
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        st.subheader("Puissance max par séance")
+        st.subheader(T("Puissance max par séance"))
 
         fig2 = go.Figure()
         for i, seance in enumerate(sorted(df["Séance"].unique())):
@@ -398,8 +527,8 @@ elif page == "3 · Puissance & Effort":
     col3, col4 = st.columns(2)
 
     with col3:
-        st.subheader("FC moyenne Tour 2")
-        st.caption("Effort cardiovasculaire sur le lap rapide")
+        st.subheader(T("FC moyenne Tour 2"))
+        st.caption(T("Effort cardiovasculaire sur le lap rapide"))
 
         fig3 = go.Figure()
         for coureur in coureurs_sel:
@@ -419,8 +548,8 @@ elif page == "3 · Puissance & Effort":
         st.plotly_chart(fig3, use_container_width=True)
 
     with col4:
-        st.subheader("Efficacité cardiovasculaire")
-        st.caption("Temps 400m / FC moy · plus bas = plus efficace à effort cardiaque égal")
+        st.subheader(T("Efficacité cardiovasculaire"))
+        st.caption(T("Temps 400m / FC moy · plus bas = plus efficace à effort cardiaque égal"))
 
         df_eff = df.dropna(subset=["Temps400m_s", "FC_moy"]).copy()
         df_eff["eff"] = df_eff["Temps400m_s"] / df_eff["FC_moy"]
@@ -446,18 +575,18 @@ elif page == "3 · Puissance & Effort":
 # ══════════════════════════════════════════════════════════════════════════════
 #  4 — FACE-À-TÊTE
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "4 · Face-à-tête":
-    st.title("Face-à-tête — Comparaison 2 coureurs")
+elif page_key == "face":
+    st.title(T("Face-à-tête — Comparaison 2 coureurs"))
 
     if len(coureurs_sel) < 2:
-        st.warning("Sélectionnez au moins 2 coureurs dans la sidebar.")
+        st.warning(T("Sélectionnez au moins 2 coureurs dans la sidebar."))
         st.stop()
 
     col_a, col_b = st.columns(2)
     with col_a:
-        ca = st.selectbox("Coureur A", coureurs_sel, index=0)
+        ca = st.selectbox(T("Coureur A"), coureurs_sel, index=0)
     with col_b:
-        cb = st.selectbox("Coureur B", [c for c in coureurs_sel if c != ca], index=0)
+        cb = st.selectbox(T("Coureur B"), [c for c in coureurs_sel if c != ca], index=0)
 
     dca = df[df["Coureur"] == ca].sort_values("Séance")
     dcb = df[df["Coureur"] == cb].sort_values("Séance")
@@ -465,7 +594,7 @@ elif page == "4 · Face-à-tête":
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("Temps 400m séance par séance")
+        st.subheader(T("Temps 400m séance par séance"))
         fig = go.Figure()
         for coureur, dc in [(ca, dca), (cb, dcb)]:
             fig.add_trace(go.Scatter(
@@ -482,7 +611,7 @@ elif page == "4 · Face-à-tête":
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        st.subheader("Métriques clés — tableau comparatif")
+        st.subheader(T("Métriques clés — tableau comparatif"))
 
         metrics = ["Temps400m_str", "FC_moy", "FC_max", "Cadence_spm", "Puissance_w"]
         labels  = ["Temps 400m", "FC moy (bpm)", "FC max (bpm)", "Cadence (spm)", "Puissance (W)"]
@@ -506,7 +635,7 @@ elif page == "4 · Face-à-tête":
                      use_container_width=True, height=420)
 
     st.divider()
-    st.subheader("Radar — profil global (toutes séances)")
+    st.subheader(T("Radar — profil global (toutes séances)"))
 
     RADAR_COLS = [
         ("Vitesse",   "Temps400m_s",  False),
@@ -552,15 +681,15 @@ elif page == "4 · Face-à-tête":
 # ══════════════════════════════════════════════════════════════════════════════
 #  5 — PROFIL DE VITESSE
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "5 · Profil de vitesse":
-    st.title("Profil de vitesse instantanée — Tour 2")
-    st.caption("Courbe m/s second-par-second sur le lap d'effort maximal")
+elif page_key == "speed":
+    st.title(T("Profil de vitesse instantanée — Tour 2"))
+    st.caption(T("Courbe m/s second-par-second sur le lap d'effort maximal"))
 
     col_s, col_x = st.columns([2, 3])
     with col_s:
-        seance_v = st.selectbox("Séance", sorted(df["Séance"].unique()))
+        seance_v = st.selectbox(T("Séance"), sorted(df["Séance"].unique()))
     with col_x:
-        axe = st.radio("Axe X", ["Temps (s)", "Distance (m)"], horizontal=True)
+        axe = st.radio(T("X Axis"), [T("Time (s)"), T("Distance (m)")], horizontal=True)
 
     coureurs_v = [c for c in coureurs_sel if
                   (df[(df["Coureur"] == c) & (df["Séance"] == seance_v)].shape[0] > 0)]
@@ -571,7 +700,7 @@ elif page == "5 · Profil de vitesse":
         if seg is None or seg.empty or "enhanced_speed" not in seg.columns:
             continue
         seg_c = seg.dropna(subset=["enhanced_speed"])
-        x = seg_c["t_rel"] if axe == "Temps (s)" else seg_c["dist_rel"]
+        x = seg_c["t_rel"] if axe == T("Time (s)") else seg_c["dist_rel"]
         # Lissage léger (rolling 3s)
         y = seg_c["enhanced_speed"].rolling(3, center=True, min_periods=1).mean()
         fig.add_trace(go.Scatter(
@@ -582,16 +711,16 @@ elif page == "5 · Profil de vitesse":
         ))
 
     if fig.data:
-        xlabel = "Temps (s)" if axe == "Temps (s)" else "Distance (m)"
+        xlabel = T("Time (s)") if axe == T("Time (s)") else T("Distance (m)")
         fig.update_layout(**LAYOUT, height=420,
                           xaxis=dict(**_AXIS, title=xlabel),
                           yaxis=dict(**_AXIS, title="Vitesse (m/s)"))
         st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("Données FIT non disponibles pour cette sélection.")
+        st.info(T("Données FIT non disponibles pour cette sélection."))
 
     st.divider()
-    st.subheader("Vitesse max instantanée — comparaison")
+    st.subheader(T("Vitesse max instantanée — comparaison"))
     vmax_rows = []
     for coureur in coureurs_sel:
         for s in seances_sel:
@@ -611,11 +740,11 @@ elif page == "5 · Profil de vitesse":
 # ══════════════════════════════════════════════════════════════════════════════
 #  6 — ACCÉLÉRATIONS
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "6 · Accélérations":
-    st.title("Analyse des accélérations — Tour 2")
-    st.caption("Dérivée de la vitesse (m/s²) · positif = accélération · négatif = ralentissement")
+elif page_key == "accel":
+    st.title(T("Analyse des accélérations — Tour 2"))
+    st.caption(T("Dérivée de la vitesse (m/s²) · positif = accélération · négatif = ralentissement"))
 
-    seance_a = st.selectbox("Séance", sorted(df["Séance"].unique()))
+    seance_a = st.selectbox(T("Séance"), sorted(df["Séance"].unique()))
 
     fig = go.Figure()
     for coureur in coureurs_sel:
@@ -645,13 +774,13 @@ elif page == "6 · Accélérations":
         st.divider()
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.subheader("Accél. max au départ")
-            st.caption("Pic d'accélération dans les 10 premières secondes")
+            st.subheader(T("Accél. max au départ"))
+            st.caption(T("Pic d'accélération dans les 10 premières secondes"))
         with col2:
-            st.subheader("Accél. moy sur le lap")
+            st.subheader(T("Accél. moy sur le lap"))
         with col3:
-            st.subheader("Décél. en fin de course")
-            st.caption("Accélération moy sur les 10 dernières secondes")
+            st.subheader(T("Décél. en fin de course"))
+            st.caption(T("Accélération moy sur les 10 dernières secondes"))
 
         for coureur in coureurs_sel:
             seg = get_fit(coureur, seance_a, "tour2")
@@ -679,17 +808,17 @@ elif page == "6 · Accélérations":
             with col3:
                 st.metric(coureur, f"{a_end:.3f} m/s²" if pd.notna(a_end) else "N/A")
     else:
-        st.info("Données FIT non disponibles.")
+        st.info(T("Données FIT non disponibles."))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  7 — RÉCUPÉRATION CARDIAQUE
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "7 · Récupération cardiaque":
-    st.title("Récupération cardiaque post-Tour 2")
-    st.caption("Descente de la FC après la fin du lap d'effort maximal")
+elif page_key == "recovery":
+    st.title(T("Récupération cardiaque post-Tour 2"))
+    st.caption(T("Descente de la FC après la fin du lap d'effort maximal"))
 
-    seance_r = st.selectbox("Séance", sorted(df["Séance"].unique()))
+    seance_r = st.selectbox(T("Séance"), sorted(df["Séance"].unique()))
     seuil_bpm = st.slider("Seuil de récupération (bpm)", 100, 150, 120)
 
     fig = go.Figure()
@@ -731,25 +860,25 @@ elif page == "7 · Récupération cardiaque":
         st.plotly_chart(fig, use_container_width=True)
 
         if recov_data:
-            st.subheader("Tableau de récupération")
+            st.subheader(T("Tableau de récupération"))
             st.dataframe(pd.DataFrame(recov_data).set_index("Coureur"),
                          use_container_width=True)
     else:
-        st.info("Données FIT post-Tour 2 non disponibles.")
+        st.info(T("Données FIT post-Tour 2 non disponibles."))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  8 — HEATMAP MÉTÉO
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "8 · Heatmap Météo":
-    st.title("Heatmap Météo × Performance")
+elif page_key == "heatmap":
+    st.title(T("Heatmap Météo × Performance"))
 
     has_meteo = "temperature_c" in df.columns and df["temperature_c"].notna().any()
     if not has_meteo:
-        st.warning("Données météo non disponibles.")
+        st.warning(T("Données météo non disponibles."))
         st.stop()
 
-    metrique = st.selectbox("Métrique", ["Temps400m_s", "FC_moy", "Puissance_w"],
+    metrique = st.selectbox(T("Métrique"), ["Temps400m_s", "FC_moy", "Puissance_w"],
                              format_func=lambda x: {
                                  "Temps400m_s": "Temps 400m (s)",
                                  "FC_moy": "FC moyenne (bpm)",
@@ -759,7 +888,7 @@ elif page == "8 · Heatmap Météo":
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("Heatmap Température × Coureur")
+        st.subheader(T("Heatmap Température × Coureur"))
         pivot = df.pivot_table(index="Coureur", columns="Séance",
                                values=metrique, aggfunc="mean")
         temp_labels = {s: f"S{s}\n{df[df['Séance']==s]['temperature_c'].mean():.1f}°C"
@@ -780,7 +909,7 @@ elif page == "8 · Heatmap Météo":
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        st.subheader("Scatter Température × Métrique")
+        st.subheader(T("Scatter Température × Métrique"))
         df_sc = df.dropna(subset=["temperature_c", metrique])
         fig2 = go.Figure()
         for coureur in coureurs_sel:
@@ -803,7 +932,7 @@ elif page == "8 · Heatmap Météo":
         st.plotly_chart(fig2, use_container_width=True)
 
     st.divider()
-    st.subheader("Humidité × Temps 400m")
+    st.subheader(T("Humidité × Temps 400m"))
     df_h = df.dropna(subset=["humidite_pct", "Temps400m_s"])
     fig3 = go.Figure()
     for coureur in coureurs_sel:
@@ -827,11 +956,11 @@ elif page == "8 · Heatmap Météo":
 # ══════════════════════════════════════════════════════════════════════════════
 #  9 — PROGRESSION
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "9 · Progression":
-    st.title("Courbes de progression — Tour 2")
-    st.caption("Évolution séance par séance · Khalil absent S3 (maladie)")
+elif page_key == "progress":
+    st.title(T("Courbes de progression — Tour 2"))
+    st.caption(T("Évolution séance par séance · Khalil absent S3 (maladie)"))
 
-    metrique_p = st.radio("Métrique", ["Temps400m_s", "FC_max", "Puissance_w"],
+    metrique_p = st.radio(T("Métrique"), ["Temps400m_s", "FC_max", "Puissance_w"],
                            format_func=lambda x: {
                                "Temps400m_s": "Temps au 400m",
                                "FC_max": "FC max",
@@ -842,7 +971,7 @@ elif page == "9 · Progression":
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("Évolution absolue")
+        st.subheader(T("Évolution absolue"))
         fig = go.Figure()
         for coureur in coureurs_sel:
             dc = df[df["Coureur"] == coureur].sort_values("Séance").dropna(subset=[metrique_p])
@@ -863,8 +992,8 @@ elif page == "9 · Progression":
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        st.subheader("Progression vs Séance 1 (%)")
-        st.caption("Positif = amélioration · négatif = régression")
+        st.subheader(T("Progression vs Séance 1 (%)"))
+        st.caption(T("Positif = amélioration · négatif = régression"))
 
         fig2 = go.Figure()
         for coureur in coureurs_sel:
@@ -892,7 +1021,7 @@ elif page == "9 · Progression":
         st.plotly_chart(fig2, use_container_width=True)
 
     st.divider()
-    st.subheader("Tableau de synthèse — Temps 400m toutes séances")
+    st.subheader(T("Tableau de synthèse — Temps 400m toutes séances"))
     rows = []
     for coureur in sorted(coureurs_sel):
         row = {"Coureur": coureur}
@@ -908,11 +1037,11 @@ elif page == "9 · Progression":
 # ══════════════════════════════════════════════════════════════════════════════
 #  10 — CARTE GPS ANIMÉE
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "10 · Carte GPS animée":
-    st.title("Carte GPS — Simulation Tour 2")
-    st.caption("Positionnement second-par-second sur le parcours réel · Parc de Champagne, Reims")
+elif page_key == "gps":
+    st.title(T("Carte GPS — Simulation Tour 2"))
+    st.caption(T("Positionnement second-par-second sur le parcours réel · Parc de Champagne, Reims"))
 
-    seance_map = st.selectbox("Séance", sorted(df["Séance"].unique()), key="map_seance")
+    seance_map = st.selectbox(T("Séance"), sorted(df["Séance"].unique()), key="map_seance")
 
     segs = {}
     for coureur in coureurs_sel:
@@ -923,7 +1052,7 @@ elif page == "10 · Carte GPS animée":
                 segs[coureur] = seg
 
     if not segs:
-        st.info("Données GPS non disponibles.")
+        st.info(T("Données GPS non disponibles."))
     else:
         max_t = int(max(s["t_rel"].max() for s in segs.values()))
         center_lat = np.mean([s["position_lat"].mean() for s in segs.values()])
@@ -931,9 +1060,9 @@ elif page == "10 · Carte GPS animée":
 
         col_mode, _ = st.columns([2, 3])
         with col_mode:
-            mode = st.radio("Mode", ["Slider interactif", "Animation Plotly"], horizontal=True)
+            mode = st.radio(T("Mode"), [T("Interactive slider"), T("Plotly animation")], horizontal=True)
 
-        if mode == "Slider interactif":
+        if mode == T("Interactive slider"):
             t_sel = st.slider("⏱ Secondes depuis départ Tour 2", 0, max_t, 0)
 
             fig = go.Figure()
@@ -1021,7 +1150,7 @@ elif page == "10 · Carte GPS animée":
 
         # Stats GPS
         st.divider()
-        st.subheader("Vitesse max GPS par coureur")
+        st.subheader(T("Vitesse max GPS par coureur"))
         gps_stats = []
         for coureur, seg in segs.items():
             gps_stats.append({
@@ -1036,12 +1165,12 @@ elif page == "10 · Carte GPS animée":
 # ══════════════════════════════════════════════════════════════════════════════
 #  11 — TOUR 1 / 2 / 3
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "11 · Tour 1 / 2 / 3":
-    st.title("Comparaison Tour 1 / Tour 2 / Tour 3")
-    st.caption("Échauffement vs Effort maximal vs Récupération — structure réelle de la séance 3×400m")
+elif page_key == "laps":
+    st.title(T("Comparaison Tour 1 / Tour 2 / Tour 3"))
+    st.caption(T("Échauffement vs Effort maximal vs Récupération — structure réelle de la séance 3×400m"))
 
-    seance_t = st.selectbox("Séance", sorted(df["Séance"].unique()), key="t123_seance")
-    metrique_t = st.radio("Métrique", ["Vitesse (m/s)", "FC (bpm)", "Cadence (spm)"],
+    seance_t = st.selectbox(T("Séance"), sorted(df["Séance"].unique()), key="t123_seance")
+    metrique_t = st.radio(T("Metric"), [T("Speed (m/s)"), T("HR (bpm)"), T("Cadence (spm)")],
                           horizontal=True, key="t123_met")
 
     col_map = {"Vitesse (m/s)": "enhanced_speed", "FC (bpm)": "heart_rate", "Cadence (spm)": "cadence"}
@@ -1053,9 +1182,9 @@ elif page == "11 · Tour 1 / 2 / 3":
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("Profil au fil du temps")
-        st.caption("Superposition des 3 tours pour chaque coureur")
-        coureur_t = st.selectbox("Coureur", coureurs_sel, key="t123_coureur")
+        st.subheader(T("Profil au fil du temps"))
+        st.caption(T("Superposition des 3 tours pour chaque coureur"))
+        coureur_t = st.selectbox(T("Coureur"), coureurs_sel, key="t123_coureur")
 
         tours = load_all_tours(coureur_t, seance_t)
         if tours is None:
@@ -1082,8 +1211,8 @@ elif page == "11 · Tour 1 / 2 / 3":
             st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        st.subheader("Moyenne par tour — tous coureurs")
-        st.caption("Comparaison de l'effort moyen sur chaque tour")
+        st.subheader(T("Moyenne par tour — tous coureurs"))
+        st.caption(T("Comparaison de l'effort moyen sur chaque tour"))
 
         summary_rows = []
         for coureur in coureurs_sel:
@@ -1118,7 +1247,7 @@ elif page == "11 · Tour 1 / 2 / 3":
             st.plotly_chart(fig2, use_container_width=True)
 
     st.divider()
-    st.subheader("Tableau récapitulatif — moyennes par tour")
+    st.subheader(T("Tableau récapitulatif — moyennes par tour"))
     recap = []
     for coureur in sorted(coureurs_sel):
         tours = load_all_tours(coureur, seance_t)
@@ -1141,11 +1270,11 @@ elif page == "11 · Tour 1 / 2 / 3":
 # ══════════════════════════════════════════════════════════════════════════════
 #  12 — SPLITS 100M
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "12 · Splits 100m":
-    st.title("Splits 100m — Tour 2")
-    st.caption("Temps pour chaque tranche de 100m · révèle la stratégie de course")
+elif page_key == "splits":
+    st.title(T("Splits 100m — Tour 2"))
+    st.caption(T("Temps pour chaque tranche de 100m · révèle la stratégie de course"))
 
-    seance_sp = st.selectbox("Séance", sorted(df["Séance"].unique()), key="split_seance")
+    seance_sp = st.selectbox(T("Séance"), sorted(df["Séance"].unique()), key="split_seance")
 
     def get_splits(coureur, seance):
         seg = get_fit(coureur, seance, "tour2")
@@ -1175,7 +1304,7 @@ elif page == "12 · Splits 100m":
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("Temps par 100m (secondes)")
+        st.subheader(T("Temps par 100m (secondes)"))
         fig = go.Figure()
         for coureur, splits in all_splits.items():
             x = [s["100m"] for s in splits]
@@ -1194,7 +1323,7 @@ elif page == "12 · Splits 100m":
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        st.subheader("Allure par 100m (min/km)")
+        st.subheader(T("Allure par 100m (min/km)"))
         fig2 = go.Figure()
         for coureur, splits in all_splits.items():
             x = [s["100m"] for s in splits]
@@ -1215,8 +1344,8 @@ elif page == "12 · Splits 100m":
         st.plotly_chart(fig2, use_container_width=True)
 
     st.divider()
-    st.subheader("Analyse : qui gère le mieux son effort ?")
-    st.caption("Ratio dernier 100m / premier 100m · < 1 = accélération finale · > 1 = ralentissement")
+    st.subheader(T("Analyse : qui gère le mieux son effort ?"))
+    st.caption(T("Ratio dernier 100m / premier 100m · < 1 = accélération finale · > 1 = ralentissement"))
     ratio_rows = []
     for coureur, splits in all_splits.items():
         if len(splits) >= 2:
@@ -1235,16 +1364,16 @@ elif page == "12 · Splits 100m":
 # ══════════════════════════════════════════════════════════════════════════════
 #  13 — DISTRIBUTION DES VITESSES
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "13 · Distribution vitesses":
-    st.title("Distribution des vitesses — Tour 2")
-    st.caption("Quelle % du lap chaque coureur passe à quelle vitesse ?")
+elif page_key == "dist":
+    st.title(T("Distribution des vitesses — Tour 2"))
+    st.caption(T("Quelle % du lap chaque coureur passe à quelle vitesse ?"))
 
-    seance_dv = st.selectbox("Séance", sorted(df["Séance"].unique()), key="dv_seance")
+    seance_dv = st.selectbox(T("Séance"), sorted(df["Séance"].unique()), key="dv_seance")
 
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("Histogramme de vitesse (km/h)")
+        st.subheader(T("Histogramme de vitesse (km/h)"))
         fig = go.Figure()
         for coureur in coureurs_sel:
             seg = get_fit(coureur, seance_dv, "tour2")
@@ -1265,7 +1394,7 @@ elif page == "13 · Distribution vitesses":
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        st.subheader("Violin plot — dispersion des vitesses")
+        st.subheader(T("Violin plot — dispersion des vitesses"))
         fig2 = go.Figure()
         for coureur in coureurs_sel:
             seg = get_fit(coureur, seance_dv, "tour2")
@@ -1285,7 +1414,7 @@ elif page == "13 · Distribution vitesses":
         st.plotly_chart(fig2, use_container_width=True)
 
     st.divider()
-    st.subheader("Zones de vitesse (% du temps par zone)")
+    st.subheader(T("Zones de vitesse (% du temps par zone)"))
     zones = [(0, 10, "< 10 km/h"), (10, 15, "10–15"), (15, 20, "15–20"),
              (20, 25, "20–25"), (25, 30, "25–30"), (30, 100, "> 30 km/h")]
     zone_rows = []
@@ -1306,12 +1435,12 @@ elif page == "13 · Distribution vitesses":
 # ══════════════════════════════════════════════════════════════════════════════
 #  14 — ALLURE INSTANTANÉE
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "14 · Allure instantanée":
-    st.title("Allure instantanée — Tour 2")
-    st.caption("min/km second-par-second · plus bas = plus rapide")
+elif page_key == "pace":
+    st.title(T("Allure instantanée — Tour 2"))
+    st.caption(T("min/km second-par-second · plus bas = plus rapide"))
 
-    seance_ai = st.selectbox("Séance", sorted(df["Séance"].unique()), key="ai_seance")
-    axe_ai = st.radio("Axe X", ["Temps (s)", "Distance (m)"], horizontal=True, key="ai_axe")
+    seance_ai = st.selectbox(T("Séance"), sorted(df["Séance"].unique()), key="ai_seance")
+    axe_ai = st.radio(T("X Axis"), [T("Time (s)"), T("Distance (m)")], horizontal=True, key="ai_axe")
 
     fig = go.Figure()
     for coureur in coureurs_sel:
@@ -1325,7 +1454,7 @@ elif page == "14 · Allure instantanée":
         seg_c["allure_label"] = seg_c["allure_s_km"].apply(
             lambda s: f"{int(s)//60}:{int(s)%60:02d}/km" if pd.notna(s) else "N/A"
         )
-        x = seg_c["t_rel"] if axe_ai == "Temps (s)" else seg_c["dist_rel"]
+        x = seg_c["t_rel"] if axe_ai == T("Time (s)") else seg_c["dist_rel"]
         fig.add_trace(go.Scatter(
             x=x, y=seg_c["allure_s_km"],
             name=coureur, mode="lines",
@@ -1343,7 +1472,7 @@ elif page == "14 · Allure instantanée":
     st.plotly_chart(fig, use_container_width=True)
 
     st.divider()
-    st.subheader("Comparaison toutes séances — allure min atteinte")
+    st.subheader(T("Comparaison toutes séances — allure min atteinte"))
     fig2 = go.Figure()
     for coureur in coureurs_sel:
         pts = []
@@ -1373,9 +1502,9 @@ elif page == "14 · Allure instantanée":
 # ══════════════════════════════════════════════════════════════════════════════
 #  15 — PUISSANCE W/KG
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "15 · Puissance W/kg":
-    st.title("Puissance relative — W/kg")
-    st.caption("Corrige le biais du profil Garmin Arthur 70 kg en rapportant la puissance au poids réel")
+elif page_key == "wkg":
+    st.title(T("Puissance relative — W/kg"))
+    st.caption(T("Corrige le biais du profil Garmin Arthur 70 kg en rapportant la puissance au poids réel"))
 
     poids_info = " · ".join(f"{c} {POIDS.get(c, '?')} kg" for c in sorted(COUREURS_CONNUS) if c in coureurs_sel)
     st.info(f"Poids utilisés : {poids_info}")
@@ -1389,7 +1518,7 @@ elif page == "15 · Puissance W/kg":
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("W/kg par séance")
+        st.subheader(T("W/kg par séance"))
         fig = go.Figure()
         for coureur in coureurs_sel:
             dc = df_wkg[df_wkg["Coureur"] == coureur].sort_values("Séance").dropna(subset=["Puissance_wkg"])
@@ -1409,8 +1538,8 @@ elif page == "15 · Puissance W/kg":
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        st.subheader("Comparaison Watts bruts vs W/kg")
-        st.caption("Voir si le classement change après correction du poids")
+        st.subheader(T("Comparaison Watts bruts vs W/kg"))
+        st.caption(T("Voir si le classement change après correction du poids"))
         df_cmp = df_wkg.groupby("Coureur").agg(
             Puissance_brute=("Puissance_w", "mean"),
             Puissance_wkg=("Puissance_wkg", "mean"),
@@ -1466,16 +1595,16 @@ elif page == "15 · Puissance W/kg":
 # ══════════════════════════════════════════════════════════════════════════════
 #  16 — FC VS DISTANCE
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "16 · FC vs Distance":
-    st.title("FC vs Distance — Tour 2")
-    st.caption("Réponse cardiaque en fonction de la position sur le 400m")
+elif page_key == "hrdist":
+    st.title(T("FC vs Distance — Tour 2"))
+    st.caption(T("Réponse cardiaque en fonction de la position sur le 400m"))
 
-    seance_fd = st.selectbox("Séance", sorted(df["Séance"].unique()), key="fd_seance")
+    seance_fd = st.selectbox(T("Séance"), sorted(df["Séance"].unique()), key="fd_seance")
 
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("FC vs Distance parcourue")
+        st.subheader(T("FC vs Distance parcourue"))
         fig = go.Figure()
         for coureur in coureurs_sel:
             seg = get_fit(coureur, seance_fd, "tour2")
@@ -1497,8 +1626,8 @@ elif page == "16 · FC vs Distance":
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        st.subheader("FC vs Vitesse (scatter)")
-        st.caption("Montre si la FC suit la vitesse instantanée")
+        st.subheader(T("FC vs Vitesse (scatter)"))
+        st.caption(T("Montre si la FC suit la vitesse instantanée"))
         fig2 = go.Figure()
         for coureur in coureurs_sel:
             seg = get_fit(coureur, seance_fd, "tour2")
@@ -1520,7 +1649,7 @@ elif page == "16 · FC vs Distance":
         st.plotly_chart(fig2, use_container_width=True)
 
     st.divider()
-    st.subheader("FC max / FC moy par 100m — qui souffre le plus en fin de course ?")
+    st.subheader(T("FC max / FC moy par 100m — qui souffre le plus en fin de course ?"))
     fig3 = go.Figure()
     marks = [("0–100m", 0, 100), ("100–200m", 100, 200), ("200–300m", 200, 300), ("300–400m", 300, 400)]
     for coureur in coureurs_sel:
@@ -1548,19 +1677,19 @@ elif page == "16 · FC vs Distance":
 # ══════════════════════════════════════════════════════════════════════════════
 #  17 — VENT & DIRECTION
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "17 · Vent & Direction":
-    st.title("Vent & Conditions météo détaillées")
+elif page_key == "wind":
+    st.title(T("Vent & Conditions météo détaillées"))
 
     has_meteo = "temperature_c" in df.columns and df["temperature_c"].notna().any()
     if not has_meteo:
-        st.warning("Données météo non disponibles.")
+        st.warning(T("Données météo non disponibles."))
         st.stop()
 
     df_meteo_all = df_all.drop_duplicates("Séance").sort_values("Séance")
 
     # ── Rose des vents par séance ──────────────────────────────────────────────
-    st.subheader("Direction du vent par séance")
-    st.caption("S1 & S3 : même force (23.6 km/h) mais directions opposées — impact potentiel différent sur le parcours")
+    st.subheader(T("Direction du vent par séance"))
+    st.caption(T("S1 & S3 : même force (23.6 km/h) mais directions opposées — impact potentiel différent sur le parcours"))
 
     fig_wind = go.Figure()
     for _, row in df_meteo_all.iterrows():
@@ -1598,7 +1727,7 @@ elif page == "17 · Vent & Direction":
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("Tableau météo complet par séance")
+        st.subheader(T("Tableau météo complet par séance"))
         meteo_table = df_meteo_all[[
             "Séance", "Date", "temperature_c", "temperature_ressentie_c",
             "humidite_pct", "vent_kmh", "vent_direction_deg", "precipitation_mm"
@@ -1608,8 +1737,8 @@ elif page == "17 · Vent & Direction":
         st.dataframe(meteo_table.set_index("Séance"), use_container_width=True)
 
     with col2:
-        st.subheader("Corrélation vent × performance")
-        st.caption("Vent fort = temps plus lent ?")
+        st.subheader(T("Corrélation vent × performance"))
+        st.caption(T("Vent fort = temps plus lent ?"))
         df_vent = df_all.dropna(subset=["vent_kmh", "Temps400m_s"])
         fig2 = go.Figure()
         for coureur in sorted(df_all["Coureur"].unique()):
@@ -1633,7 +1762,7 @@ elif page == "17 · Vent & Direction":
         st.plotly_chart(fig2, use_container_width=True)
 
     st.divider()
-    st.subheader("Indice de confort — Température ressentie vs Temps 400m")
+    st.subheader(T("Indice de confort — Température ressentie vs Temps 400m"))
     df_res = df_all.dropna(subset=["temperature_ressentie_c", "Temps400m_s"])
     fig3 = go.Figure()
     for coureur in sorted(df_all["Coureur"].unique()):
