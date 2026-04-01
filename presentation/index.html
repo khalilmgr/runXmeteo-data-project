@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sprint 400m — SAÉ 4</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&family=DM+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#09090b;
+  --surface:#111113;
+  --surface2:#18181b;
+  --border:#27272a;
+  --border2:#3f3f46;
+
+  --r:#ff4560;   --r2:rgba(255,69,96,.1);  --r3:rgba(255,69,96,.2);
+  --t:#00d8b4;   --t2:rgba(0,216,180,.1);
+  --p:#a78bfa;   --p2:rgba(167,139,250,.1);
+  --a:#fbbf24;   --a2:rgba(251,191,36,.1);
+
+  --tx:#f4f4f5;
+  --tx2:#a1a1aa;
+  --tx3:#52525b;
+
+  --radius:12px;
+  --slide-pad: 56px 72px;
+}
+
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--tx);font-family:'DM Sans',sans-serif;-webkit-font-smoothing:antialiased}
+
+/* ── NOISE TEXTURE ── */
+body::before{
+  content:'';
+  position:fixed;inset:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  opacity:.025;pointer-events:none;z-index:0;
+}
+
+/* ── PROGRESS BAR ── */
+#progress{position:fixed;top:0;left:0;height:1.5px;background:linear-gradient(90deg,var(--r),var(--a));z-index:300;transition:width .5s cubic-bezier(.4,0,.2,1)}
+
+/* ── SLIDE COUNTER ── */
+#info{
+  position:fixed;bottom:20px;right:28px;
+  font-family:'DM Mono',monospace;font-size:11px;
+  color:var(--tx3);z-index:300;letter-spacing:.1em;
+}
+#info em{color:var(--tx2);font-style:normal}
+
+/* ── NAV BUTTONS ── */
+.btn{
+  position:fixed;top:50%;transform:translateY(-50%);
+  width:36px;height:36px;border-radius:50%;
+  border:1px solid var(--border2);
+  background:rgba(17,17,19,.7);
+  color:var(--tx2);font-size:14px;cursor:pointer;
+  z-index:300;display:flex;align-items:center;justify-content:center;
+  transition:all .2s;backdrop-filter:blur(12px);
+}
+.btn:hover{background:var(--r);border-color:var(--r);color:#fff;transform:translateY(-50%) scale(1.05)}
+#prev{left:16px}#next{right:16px}
+
+/* ── SLIDE ENGINE ── */
+#deck{position:relative;width:100%;height:100vh;z-index:1}
+.slide{
+  position:absolute;inset:0;
+  display:flex;align-items:center;justify-content:center;
+  padding:var(--slide-pad);
+  opacity:0;pointer-events:none;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.4,0,.2,1);
+  transform:translateY(16px);
+}
+.slide.on{opacity:1;pointer-events:all;transform:none}
+.slide.out{opacity:0;transform:translateY(-10px);transition:opacity .25s,transform .25s}
+
+/* ── TYPOGRAPHY ── */
+h1,h2,h3{font-family:'Syne',sans-serif}
+h1{font-weight:800}
+h2{font-weight:700;font-size:1.9rem;line-height:1.2;letter-spacing:-.02em}
+h3{font-weight:700;font-size:1.05rem;letter-spacing:-.01em}
+p{font-size:.9rem;line-height:1.75;color:var(--tx2)}
+.mono{font-family:'DM Mono',monospace}
+
+/* ── UTILS ── */
+.tag{
+  display:inline-block;font-size:.65rem;font-weight:600;
+  text-transform:uppercase;letter-spacing:.18em;
+  color:var(--tx3);margin-bottom:12px;
+}
+.bar{display:block;width:32px;height:2px;background:var(--r);border-radius:2px;margin-bottom:20px}
+.full{width:100%}
+.l2{display:flex;gap:40px;align-items:flex-start;width:100%}
+.l2c{display:flex;gap:40px;align-items:center;width:100%}
+.col{flex:1}.col-wide{flex:1.4}.col-narrow{flex:.8}
+.ghost{
+  position:absolute;right:60px;top:50%;transform:translateY(-50%);
+  font-family:'Syne',sans-serif;font-weight:800;font-size:16rem;
+  color:var(--surface2);line-height:1;pointer-events:none;z-index:0;user-select:none;
+  letter-spacing:-.04em;
+}
+.slide>*{position:relative;z-index:1}
+
+/* ── CARD ── */
+.card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:20px 22px;
+}
+.card-r{border-top:2px solid var(--r)}.card-t{border-top:2px solid var(--t)}
+.card-p{border-top:2px solid var(--p)}.card-a{border-top:2px solid var(--a)}
+
+/* ── STAT ── */
+.stat-val{font-family:'DM Mono',monospace;font-size:2.4rem;font-weight:500;line-height:1}
+.stat-label{font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;color:var(--tx3);margin-top:6px}
+
+/* ── RUNNER COLORS ── */
+.c-r{color:var(--r)}.c-t{color:var(--t)}.c-p{color:var(--p)}.c-a{color:var(--a)}
+.dot-r{background:var(--r)}.dot-t{background:var(--t)}.dot-p{background:var(--p)}.dot-a{background:var(--a)}
+.rdot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* ── BADGE ── */
+.badge{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:4px 10px;border-radius:99px;
+  font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;
+}
+.badge-r{background:var(--r2);color:var(--r);border:1px solid var(--r3)}
+.badge-t{background:var(--t2);color:var(--t);border:1px solid rgba(0,216,180,.2)}
+.badge-p{background:var(--p2);color:var(--p);border:1px solid rgba(167,139,250,.2)}
+.badge-a{background:var(--a2);color:var(--a);border:1px solid rgba(251,191,36,.2)}
+.badge-n{background:var(--surface2);color:var(--tx2);border:1px solid var(--border)}
+
+/* ── TABLE ── */
+.dt{width:100%;border-collapse:collapse;font-size:.82rem}
+.dt th{
+  text-transform:uppercase;letter-spacing:.1em;font-size:.62rem;
+  color:var(--tx3);padding:9px 14px;text-align:left;
+  border-bottom:1px solid var(--border);font-family:'DM Mono',monospace;
+}
+.dt td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--tx)}
+.dt tr:last-child td{border-bottom:none}
+.dt tbody tr:hover td{background:var(--surface2)}
+
+/* ── DIVIDER ── */
+.hdiv{border:none;border-top:1px solid var(--border);margin:16px 0}
+
+/* ── CRIT ROW ── */
+.crit-row{
+  display:flex;gap:14px;align-items:flex-start;
+  padding:16px;background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--radius);
+  margin-bottom:10px;
+}
+.crit-row .cr-icon{font-size:1.1rem;flex-shrink:0;margin-top:1px}
+.crit-row .cr-title{font-weight:600;font-size:.88rem;color:var(--tx);margin-bottom:3px}
+.crit-row .cr-body{font-size:.8rem;color:var(--tx2);line-height:1.65}
+
+/* ── PIPELINE ── */
+.pipe{display:flex;align-items:stretch;gap:0;width:100%}
+.pipe-node{
+  flex:1;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:20px 16px;text-align:center;
+  transition:.2s;
+}
+.pipe-node:hover{border-color:var(--border2);transform:translateY(-2px)}
+.pipe-node .pn-icon{font-size:1.5rem;display:block;margin-bottom:10px}
+.pipe-node .pn-title{font-weight:600;font-size:.82rem;color:var(--tx);display:block;margin-bottom:4px}
+.pipe-node .pn-sub{font-size:.7rem;color:var(--tx2);line-height:1.5}
+.pipe-arrow{color:var(--border2);font-size:.9rem;padding:0 6px;flex-shrink:0;display:flex;align-items:center}
+
+/* ── DEVICE ── */
+.device{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.device-photo{
+  height:200px;background:var(--surface2);
+  display:flex;align-items:center;justify-content:center;
+  border-bottom:1px solid var(--border);overflow:hidden;
+}
+.device-photo img{
+  width:100%;height:100%;
+  object-fit:contain;padding:20px;
+  filter:brightness(.9);
+  transition:.3s;
+}
+.device:hover .device-photo img{filter:brightness(1)}
+.device-body{padding:18px 20px}
+.device-name{font-family:'Syne',sans-serif;font-weight:700;font-size:.95rem;margin-bottom:12px}
+.spec{display:flex;align-items:flex-start;gap:8px;font-size:.78rem;color:var(--tx2);margin-bottom:6px;line-height:1.5}
+.spec::before{content:'—';color:var(--border2);flex-shrink:0;margin-top:1px}
+
+/* ── RUNNER CARD ── */
+.rcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.rcard-photo{
+  overflow:hidden;
+  position:relative;
+}
+.rcard-photo img{
+  width:100%;height:100%;
+  object-fit:cover;object-position:center 15%;
+  filter:grayscale(20%) brightness(.88);
+  transition:.35s;
+}
+.rcard:hover .rcard-photo img{filter:grayscale(0%) brightness(.95);transform:scale(1.03)}
+.rcard-body{padding:14px 16px;border-top:1px solid var(--border)}
+.rcard-name{font-family:'Syne',sans-serif;font-weight:700;font-size:.92rem;margin-bottom:2px}
+.rcard-best{font-family:'DM Mono',monospace;font-size:1.05rem;font-weight:500;margin-top:5px}
+.rcard-stats{display:flex;gap:14px;margin-top:8px}
+.rcard-stat{font-size:.7rem;color:var(--tx3)}
+.rcard-stat strong{display:block;color:var(--tx2);font-family:'DM Mono',monospace;font-size:.82rem}
+
+/* ── HERO ── */
+.slide-hero{padding:0!important}
+.hero-inner{width:100%;height:100%;display:flex;flex-direction:column}
+.hero-top{
+  flex:1;display:flex;align-items:center;padding:52px 72px;
+  position:relative;gap:60px;
+  border-bottom:1px solid var(--border);
+}
+.hero-top h1{
+  font-size:5.8rem;line-height:.88;letter-spacing:-.04em;text-transform:uppercase;
+}
+.hero-top h1 span{color:var(--r);display:block}
+.hero-meta{
+  flex-shrink:0;padding:20px 72px;
+  display:flex;align-items:center;gap:40px;
+  border-bottom:1px solid var(--border);
+}
+.hero-meta .sep{width:1px;height:24px;background:var(--border)}
+.hero-meta-item .val{font-family:'DM Mono',monospace;font-size:1.4rem;color:var(--r);line-height:1}
+.hero-meta-item .lbl{font-size:.65rem;text-transform:uppercase;letter-spacing:.14em;color:var(--tx3);margin-top:4px}
+.hero-bottom{
+  flex-shrink:0;flex:0 0 260px;
+  display:grid;grid-template-columns:repeat(4,1fr);
+}
+.hero-photo{overflow:hidden;position:relative;height:100%}
+.hero-photo img{
+  width:100%;height:100%;object-fit:cover;object-position:center 20%;
+  filter:brightness(.75) grayscale(10%);
+  transition:.4s;
+}
+.hero-photo:hover img{filter:brightness(.92) grayscale(0%);transform:scale(1.04)}
+.hero-photo .hp-name{
+  position:absolute;bottom:0;left:0;right:0;
+  padding:12px 16px;
+  background:linear-gradient(transparent,rgba(0,0,0,.8));
+  font-family:'Syne',sans-serif;font-weight:700;font-size:.8rem;
+  text-transform:uppercase;letter-spacing:.12em;
+}
+.hero-photo:not(:last-child){border-right:1px solid var(--border)}
+
+/* ── CONCLUSION NUM ── */
+.ccl-num{
+  width:42px;height:42px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.2rem;flex-shrink:0;
+  border:1px solid var(--border);
+  background:var(--surface2);
+}
+
+/* ── CHART ── */
+.chart-wrap{position:relative;width:100%;height:100%}
+canvas{display:block!important}
+
+/* ── BIG QUESTION ── */
+.big-q{
+  font-family:'Syne',sans-serif;font-weight:800;
+  font-size:2.3rem;line-height:1.1;
+  letter-spacing:-.03em;
+  margin-bottom:28px;
+}
+.big-q em{font-style:normal;color:var(--r)}
+
+</style>
+</head>
+<body>
+
+<div id="progress"></div>
+<div id="info"><em id="cur">01</em> / <span id="tot">15</span></div>
+<button class="btn" id="prev">&#8592;</button>
+<button class="btn" id="next">&#8594;</button>
+
+<div id="deck">
+
+<!-- ════════ 01 HERO ════════ -->
+<div class="slide slide-hero on" id="s1">
+  <div class="hero-inner">
+    <div class="hero-top">
+      <div style="flex:1">
+        <div class="tag" style="color:var(--tx3);margin-bottom:18px">SAÉ 4 · IUT Informatique Reims · 2026</div>
+        <h1>Sprint<span>400m</span></h1>
+        <p style="font-size:.95rem;margin-top:20px;max-width:440px;color:var(--tx2);line-height:1.8">De l'extraction automatique des données Garmin à la visualisation interactive de la performance.</p>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:7rem;color:var(--surface2);line-height:.9;letter-spacing:-.04em">400</div>
+        <div style="font-size:.65rem;text-transform:uppercase;letter-spacing:.18em;color:var(--tx3);margin-top:6px">mètres · effort max</div>
+        <div style="margin-top:22px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+          <span class="badge badge-n">Python</span>
+          <span class="badge badge-n">MySQL</span>
+          <span class="badge badge-n">Streamlit</span>
+          <span class="badge badge-n">Power BI</span>
+        </div>
+      </div>
+    </div>
+    <div class="hero-meta">
+      <div class="hero-meta-item"><div class="val">4</div><div class="lbl">Coureurs</div></div>
+      <div class="sep"></div>
+      <div class="hero-meta-item"><div class="val">4</div><div class="lbl">Séances</div></div>
+      <div class="sep"></div>
+      <div class="hero-meta-item"><div class="val">1 Hz</div><div class="lbl">Fréquence GPS</div></div>
+      <div class="sep"></div>
+      <div class="hero-meta-item"><div class="val">15</div><div class="lbl">Runs analysés</div></div>
+      <div class="sep"></div>
+      <div class="hero-meta-item"><div class="val">7.4 m/s</div><div class="lbl">Pic Arthur</div></div>
+    </div>
+    <div class="hero-bottom">
+      <div class="hero-photo"><img src="img/Adrien.webp" alt="Adrien" onerror="this.parentElement.style.background='var(--surface2)'"><div class="hp-name c-a">Adrien</div></div>
+      <div class="hero-photo"><img src="img/Nathan.webp" alt="Nathan" onerror="this.parentElement.style.background='var(--surface2)'"><div class="hp-name c-t">Nathan</div></div>
+      <div class="hero-photo"><img src="img/Khalil.webp" alt="Khalil" onerror="this.parentElement.style.background='var(--surface2)'"><div class="hp-name c-p">Khalil</div></div>
+      <div class="hero-photo"><img src="img/Arthur.webp" alt="Arthur" onerror="this.parentElement.style.background='var(--surface2)'"><div class="hp-name c-r">Arthur</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ 02 ACCROCHE ════════ -->
+<div class="slide" id="s2">
+  <div class="ghost">02</div>
+  <div class="l2c" style="width:100%">
+    <div class="col">
+      <span class="tag">Introduction</span>
+      <span class="bar"></span>
+      <p class="big-q">Nos montres Garmin enregistrent<br><em>chaque seconde</em> d'effort.<br>Qu'en fait-on ?</p>
+      <p style="margin-bottom:20px">Les fichiers FIT contiennent une densité de données impressionnante : GPS, fréquence cardiaque, cadence, puissance… Mais ils restent illisibles sans traitement.</p>
+      <p>Ce projet construit un <strong style="color:var(--tx)">pipeline complet</strong> : de l'extraction brute à une visualisation sportive interactive, avec croisement météo.</p>
+    </div>
+    <div class="col">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="card card-r" style="text-align:center;padding:24px 18px">
+          <div class="stat-val c-r">52s</div>
+          <div class="stat-label">Meilleur temps<br><span class="c-r">Arthur · S2</span></div>
+        </div>
+        <div class="card card-p" style="text-align:center;padding:24px 18px">
+          <div class="stat-val c-p">196</div>
+          <div class="stat-label">FC max (bpm)<br><span class="c-p">Khalil & Nathan</span></div>
+        </div>
+        <div class="card card-a" style="text-align:center;padding:24px 18px">
+          <div class="stat-val c-a">686</div>
+          <div class="stat-label">Puissance max (W)<br><span class="c-r">Arthur · S1</span></div>
+        </div>
+        <div class="card card-t" style="text-align:center;padding:24px 18px">
+          <div class="stat-val c-t">2:04</div>
+          <div class="stat-label">Meilleure allure<br><span class="c-r">Arthur · S2</span></div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:10px;display:flex;align-items:center;gap:12px;padding:16px 18px">
+        <span style="font-size:1.5rem">📍</span>
+        <div>
+          <div style="font-weight:600;font-size:.88rem">Parc de Champagne — Reims</div>
+          <div style="font-size:.75rem;color:var(--tx2)">Piste asphalte · S1→S4 · 2026</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ 03 PROBLÉMATIQUE ════════ -->
+<div class="slide" id="s3">
+  <div class="ghost">03</div>
+  <div class="full">
+    <span class="tag">Problématique</span>
+    <span class="bar"></span>
+    <h2 style="margin-bottom:28px">Quatre questions guident ce projet</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div class="card" style="display:flex;gap:18px;align-items:flex-start;border-left:2px solid var(--r)">
+        <div style="font-family:'DM Mono',monospace;font-size:1.6rem;color:var(--r);flex-shrink:0;line-height:1;opacity:.6">01</div>
+        <div>
+          <h3 style="margin-bottom:8px">Progression inter-séances</h3>
+          <p style="font-size:.84rem">Comment les temps et métriques physiologiques évoluent-ils entre S1, S2, S3 et S4 pour chaque coureur ?</p>
+        </div>
+      </div>
+      <div class="card" style="display:flex;gap:18px;align-items:flex-start;border-left:2px solid var(--t)">
+        <div style="font-family:'DM Mono',monospace;font-size:1.6rem;color:var(--t);flex-shrink:0;line-height:1;opacity:.6">02</div>
+        <div>
+          <h3 style="margin-bottom:8px">Comparaison inter-coureurs</h3>
+          <p style="font-size:.84rem">Quelles différences de profil physiologique entre Adrien, Nathan, Khalil et Arthur ?</p>
+        </div>
+      </div>
+      <div class="card" style="display:flex;gap:18px;align-items:flex-start;border-left:2px solid var(--p)">
+        <div style="font-family:'DM Mono',monospace;font-size:1.6rem;color:var(--p);flex-shrink:0;line-height:1;opacity:.6">03</div>
+        <div>
+          <h3 style="margin-bottom:8px">Influence météorologique</h3>
+          <p style="font-size:.84rem">Les conditions climatiques (température, vent, humidité) ont-elles un impact mesurable sur les performances ?</p>
+        </div>
+      </div>
+      <div class="card" style="display:flex;gap:18px;align-items:flex-start;border-left:2px solid var(--a)">
+        <div style="font-family:'DM Mono',monospace;font-size:1.6rem;color:var(--a);flex-shrink:0;line-height:1;opacity:.6">04</div>
+        <div>
+          <h3 style="margin-bottom:8px">Profil d'effort maximal</h3>
+          <p style="font-size:.84rem">Comment se décompose le profil vitesse/puissance sur les 50 premières secondes du Tour 2 ?</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ 04 PLAN ════════ -->
+<div class="slide" id="s4">
+  <div class="ghost">04</div>
+  <div class="full">
+    <span class="tag">Déroulement</span>
+    <span class="bar"></span>
+    <h2 style="margin-bottom:32px">Plan de la présentation</h2>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px">
+      <div class="card" style="text-align:center;padding:24px 14px">
+        <div style="font-size:1.8rem;margin-bottom:12px">🔧</div>
+        <div style="font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.16em;color:var(--r);margin-bottom:8px">Partie 1</div>
+        <div style="font-weight:600;font-size:.86rem;line-height:1.4">Matériel<br>& Terrain</div>
+      </div>
+      <div class="card" style="text-align:center;padding:24px 14px">
+        <div style="font-size:1.8rem;margin-bottom:12px">⚙️</div>
+        <div style="font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.16em;color:var(--t);margin-bottom:8px">Partie 2</div>
+        <div style="font-weight:600;font-size:.86rem;line-height:1.4">Chaîne de<br>données</div>
+      </div>
+      <div class="card" style="text-align:center;padding:24px 14px">
+        <div style="font-size:1.8rem;margin-bottom:12px">📊</div>
+        <div style="font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.16em;color:var(--p);margin-bottom:8px">Partie 3</div>
+        <div style="font-weight:600;font-size:.86rem;line-height:1.4">Analyse<br>& Résultats</div>
+      </div>
+      <div class="card" style="text-align:center;padding:24px 14px">
+        <div style="font-size:1.8rem;margin-bottom:12px">🔍</div>
+        <div style="font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.16em;color:var(--a);margin-bottom:8px">Partie 4</div>
+        <div style="font-weight:600;font-size:.86rem;line-height:1.4">Discussion<br>critique</div>
+      </div>
+      <div class="card" style="text-align:center;padding:24px 14px">
+        <div style="font-size:1.8rem;margin-bottom:12px">✅</div>
+        <div style="font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.16em;color:var(--tx2);margin-bottom:8px">Partie 5</div>
+        <div style="font-weight:600;font-size:.86rem;line-height:1.4">Conclusion<br>& Bilan</div>
+      </div>
+    </div>
+    <div class="card" style="background:var(--r2);border-color:var(--r3);display:flex;gap:16px;align-items:center;padding:18px 20px">
+      <span style="font-size:1.3rem;flex-shrink:0">🎯</span>
+      <p style="font-size:.86rem;color:var(--tx)"><strong>Focus principal :</strong> le <em style="font-style:normal;color:var(--r)">Tour 2</em> — l'effort maximal d'environ 400m au sein de chaque séance. Détecté automatiquement par algorithme, c'est lui qui concentre la donnée la plus riche en performance.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ 05 MATÉRIEL ════════ -->
+<div class="slide" id="s5">
+  <div class="ghost">05</div>
+  <div class="l2c" style="width:100%;gap:28px">
+    <div class="col">
+      <span class="tag">Matériel</span>
+      <span class="bar"></span>
+      <h2 style="margin-bottom:22px">Deux sources de données</h2>
+      <div class="device" style="margin-bottom:14px">
+        <div class="device-photo">
+          <img src="img/Montre.jpg" alt="Garmin Instinct 2" onerror="this.parentElement.innerHTML='<div style=\'font-size:3.5rem;opacity:.3\'>⌚</div>'">
+        </div>
+        <div class="device-body">
+          <div class="device-name">⌚ Garmin Instinct 2</div>
+          <div class="spec">GPS 1 Hz — position, distance, vitesse instantanée</div>
+          <div class="spec">Fréquence cardiaque optique au poignet</div>
+          <div class="spec">Cadence de foulée (pas/min × 2)</div>
+          <div class="spec">Puissance de course estimée (Watts)</div>
+          <div class="spec">Export FIT sec/sec → traitement Python</div>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div style="height:30px"></div>
+      <div class="device" style="margin-bottom:14px">
+        <div class="device-photo">
+          <img src="img/Capteur.jpeg" alt="Polar OH1+" onerror="this.parentElement.innerHTML='<div style=\'font-size:3.5rem;opacity:.3\'>❤️</div>'">
+        </div>
+        <div class="device-body">
+          <div class="device-name">❤️ Polar OH1+</div>
+          <div class="spec">Capteur optique bras (OHR)</div>
+          <div class="spec">FC haute fréquence — validation croisée Garmin</div>
+          <div class="spec">Fixé sur le bras pour réduire les artefacts</div>
+        </div>
+      </div>
+      <div class="card" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 16px">
+        <div>
+          <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--tx3);margin-bottom:8px">Métriques</div>
+          <div class="spec" style="font-size:.76rem">Vitesse (m/s)</div>
+          <div class="spec" style="font-size:.76rem">FC (bpm)</div>
+          <div class="spec" style="font-size:.76rem">Puissance (W)</div>
+        </div>
+        <div>
+          <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--tx3);margin-bottom:8px">&nbsp;</div>
+          <div class="spec" style="font-size:.76rem">Cadence (spm)</div>
+          <div class="spec" style="font-size:.76rem">Distance (m)</div>
+          <div class="spec" style="font-size:.76rem">GPS lat/long</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ 06 TERRAIN & ÉQUIPE ════════ -->
+<div class="slide" id="s6">
+  <div class="ghost">06</div>
+  <div style="width:100%">
+    <div class="l2c" style="gap:28px;margin-bottom:18px">
+      <div>
+        <span class="tag">Terrain & Équipe</span>
+        <span class="bar"></span>
+        <h2>Parc de Champagne — Reims</h2>
+        <p style="margin-top:8px;font-size:.88rem">Piste asphalte · Conditions variables hiver/printemps 2026.</p>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr 1fr;gap:12px;height:320px">
+      <div style="border-radius:var(--radius);overflow:hidden;border:1px solid var(--border)">
+        <img src="img/parc.jpg" alt="Parc de Champagne" style="width:100%;height:100%;object-fit:cover;filter:brightness(.75)" onerror="this.parentElement.style.background='var(--surface)'">
+      </div>
+      <div class="rcard">
+        <div class="rcard-photo" style="height:190px"><img src="img/Adrien.webp" alt="Adrien"></div>
+        <div class="rcard-body">
+          <div class="rcard-name c-a">Adrien</div>
+          <div class="rcard-best c-a">3:27/km</div>
+          <div class="rcard-stats">
+            <div class="rcard-stat"><strong>170</strong>FC max</div>
+            <div class="rcard-stat"><strong>175spm</strong>Cadence</div>
+          </div>
+        </div>
+      </div>
+      <div class="rcard">
+        <div class="rcard-photo" style="height:190px"><img src="img/Nathan.webp" alt="Nathan"></div>
+        <div class="rcard-body">
+          <div class="rcard-name c-t">Nathan</div>
+          <div class="rcard-best c-t">2:53/km</div>
+          <div class="rcard-stats">
+            <div class="rcard-stat"><strong>196</strong>FC max</div>
+            <div class="rcard-stat"><strong>176spm</strong>Cadence</div>
+          </div>
+        </div>
+      </div>
+      <div class="rcard">
+        <div class="rcard-photo" style="height:190px"><img src="img/Khalil.webp" alt="Khalil"></div>
+        <div class="rcard-body">
+          <div class="rcard-name c-p">Khalil</div>
+          <div class="rcard-best c-p">2:47/km</div>
+          <div class="rcard-stats">
+            <div class="rcard-stat"><strong>196</strong>FC max</div>
+            <div class="rcard-stat"><strong>178spm</strong>Cadence</div>
+          </div>
+        </div>
+      </div>
+      <div class="rcard">
+        <div class="rcard-photo" style="height:190px"><img src="img/Arthur.webp" alt="Arthur"></div>
+        <div class="rcard-body">
+          <div class="rcard-name c-r">Arthur</div>
+          <div class="rcard-best c-r">2:04/km</div>
+          <div class="rcard-stats">
+            <div class="rcard-stat"><strong>188</strong>FC max</div>
+            <div class="rcard-stat"><strong>208spm</strong>Cadence</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ 07 PIPELINE ════════ -->
+<div class="slide" id="s7">
+  <div class="ghost">07</div>
+  <div class="full">
+    <span class="tag">Architecture technique</span>
+    <span class="bar"></span>
+    <h2 style="margin-bottom:28px">Chaîne de données complète</h2>
+    <div class="pipe" style="margin-bottom:18px">
+      <div class="pipe-node" style="border-top:2px solid var(--r)">
+        <span class="pn-icon">⌚</span>
+        <span class="pn-title">Capteurs</span>
+        <span class="pn-sub">Garmin FIT<br>Polar OH1+</span>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-node" style="border-top:2px solid var(--t)">
+        <span class="pn-icon">🐍</span>
+        <span class="pn-title">extract_tour2.py</span>
+        <span class="pn-sub">Seuil 75% vitesse pic<br>45–200s · ~400m</span>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-node" style="border-top:2px solid var(--p)">
+        <span class="pn-icon">🌩️</span>
+        <span class="pn-title">API Météo</span>
+        <span class="pn-sub">Open-Meteo<br>Température · Vent</span>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-node" style="border-top:2px solid var(--a)">
+        <span class="pn-icon">🗄️</span>
+        <span class="pn-title">Base de données</span>
+        <span class="pn-sub">MySQL · Jointures<br>FIT × Météo</span>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-node" style="border-top:2px solid var(--tx2)">
+        <span class="pn-icon">📊</span>
+        <span class="pn-title">Dashboards</span>
+        <span class="pn-sub">Streamlit · Power BI<br>Visualisation live</span>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+      <div class="card" style="display:flex;gap:12px;align-items:flex-start">
+        <span style="font-size:1.1rem;flex-shrink:0">🔍</span>
+        <div>
+          <div style="font-weight:600;font-size:.84rem;margin-bottom:5px">Détection automatique Tour 2</div>
+          <p style="font-size:.77rem">Algorithme basé sur la vitesse instantanée : seuil = 75% du pic. Filtre durée (45–200s) et distance (~400m) pour isoler l'effort maximal.</p>
+        </div>
+      </div>
+      <div class="card" style="display:flex;gap:12px;align-items:flex-start">
+        <span style="font-size:1.1rem;flex-shrink:0">🌦️</span>
+        <div>
+          <div style="font-weight:600;font-size:.84rem;margin-bottom:5px">Croisement météo</div>
+          <p style="font-size:.77rem">Récupération via Open-Meteo des conditions au moment exact de chaque séance (timestamp + coordonnées GPS du Parc de Champagne).</p>
+        </div>
+      </div>
+      <div class="card" style="display:flex;gap:12px;align-items:flex-start">
+        <span style="font-size:1.1rem;flex-shrink:0">⏱️</span>
+        <div>
+          <div style="font-weight:600;font-size:.84rem;margin-bottom:5px">Automatisation Cron</div>
+          <p style="font-size:.77rem">Scripts planifiés sur VM Linux. Nouveau fichier FIT déposé → extraction → mise à jour BDD → dashboard actualisé automatiquement.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ 08 TABLEAU ════════ -->
+<div class="slide" id="s8">
+  <div class="ghost">08</div>
+  <div class="full">
+    <span class="tag">Données extraites</span>
+    <span class="bar"></span>
+    <h2 style="margin-bottom:18px">Tour 2 — Résultats complets (toutes séances)</h2>
+    <table class="dt">
+      <thead>
+        <tr>
+          <th>Coureur</th><th>Séance</th><th>Durée (s)</th><th>Distance (m)</th><th>Allure</th><th>Meill. allure</th><th>FC moy</th><th>FC max</th><th>Cadence</th><th>Puissance</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><span style="display:flex;align-items:center;gap:8px"><span class="rdot dot-a"></span>Adrien</span></td><td>1</td><td class="mono">92</td><td class="mono">398.9</td><td class="mono c-a">3:43/km</td><td class="mono">3:27/km</td><td class="mono">167</td><td class="mono">170</td><td class="mono">175</td><td class="mono">454</td></tr>
+        <tr><td><span style="display:flex;align-items:center;gap:8px"><span class="rdot dot-a"></span>Adrien</span></td><td>2</td><td class="mono">96</td><td class="mono">393.4</td><td class="mono c-a">3:58/km</td><td class="mono">3:42/km</td><td class="mono">179</td><td class="mono">182</td><td class="mono">170</td><td class="mono">445</td></tr>
+        <tr><td><span style="display:flex;align-items:center;gap:8px"><span class="rdot dot-a"></span>Adrien</span></td><td>3</td><td class="mono">91</td><td class="mono">397.4</td><td class="mono c-a">3:51/km</td><td class="mono">3:35/km</td><td class="mono">169</td><td class="mono">172</td><td class="mono">179</td><td class="mono">419</td></tr>
+        <tr><td><span style="display:flex;align-items:center;gap:8px"><span class="rdot dot-a"></span>Adrien</span></td><td>4</td><td class="mono">79</td><td class="mono">333.1</td><td class="mono c-a">3:53/km</td><td class="mono">3:38/km</td><td class="mono">145</td><td class="mono">158</td><td class="mono">166</td><td class="mono">446</td></tr>
+        <tr><td><span style="display:flex;align-items:center;gap:8px"><span class="rdot dot-r"></span>Arthur</span></td><td>1</td><td class="mono">58</td><td class="mono">410.5</td><td class="mono c-r">2:14/km</td><td class="mono">2:04/km</td><td class="mono">178</td><td class="mono">188</td><td class="mono">196</td><td class="mono">686</td></tr>
+        <tr><td><span style="display:flex;align-items:center;gap:8px"><span class="rdot dot-r"></span>Arthur</span></td><td>2</td><td class="mono" style="color:var(--r);font-weight:600">52</td><td class="mono">362.1</td><td class="mono c-r">2:18/km</td><td class="mono c-r">1:59/km</td><td class="mono">177</td><td class="mono">181</td><td class="mono">206</td><td class="mono">647</td></tr>
+        <tr><td><span style="display:flex;align-items:center;gap:8px"><span class="rdot dot-r"></span>Arthur</span></td><td>3</td><td class="mono">57</td><td class="mono">394.9</td><td class="mono c-r">2:25/km</td><td class="mono">2:11/km</td><td class="mono">150</td><td class="mono">157</td><td class="mono">208</td><td class="mono">619</td></tr>
+        <tr><td><span style="display:flex;align-items:center;gap:8px"><span class="rdot dot-r"></span>Arthur</span></td><td>4</td><td class="mono">60</td><td class="mono">394.6</td><td class="mono c-r">2:22/km</td><td class="mono">2:15/km</td><td class="mono">176</td><td class="mono">183</td><td class="mono">198</td><td class="mono">624</td></tr>
+        <tr><td><span style="display:flex;align-items:center;gap:8px"><span class="rdot dot-p"></span>Khalil</span></td><td>1</td><td class="mono">76</td><td class="mono">402.7</td><td class="mono c-p">3:02/km</td><td class="mono">2:47/km</td><td class="mono">190</td><td class="mono">196</td><td class="mono">178</td><td class="mono">493</td></tr>
+        <tr><td><span style="display:flex;align-items:center;gap:8px"><span class="rdot dot-p"></span>Khalil</span></td><td>2</td><td class="mono">86</td><td class="mono">397.8</td><td class="mono c-p">3:32/km</td><td class="mono">3:23/km</td><td class="mono">163</td><td class="mono">169</td><td class="mono">172</td><td class="mono">462</td></tr>
+        <tr><td><span style="display:flex;align-items:center;gap:8px"><span class="rdot dot-p"></span>Khalil</span></td><td>4</td><td class="mono">81</td><td class="mono">423.2</td><td class="mono c-p">3:16/km</td><td class="mono">2:58/km</td><td class="mono">186</td><td class="mono">193</td><td class="mono">178</td><td class="mono">474</td></tr>
+        <tr><td><span style="display:flex;align-items:center;gap:8px"><span class="rdot dot-t"></span>Nathan</span></td><td>1</td><td class="mono">89</td><td class="mono">408.9</td><td class="mono c-t">3:38/km</td><td class="mono">3:24/km</td><td class="mono">192</td><td class="mono">196</td><td class="mono">161</td><td class="mono">479</td></tr>
+        <tr><td><span style="display:flex;align-items:center;gap:8px"><span class="rdot dot-t"></span>Nathan</span></td><td>2</td><td class="mono">71</td><td class="mono">386.4</td><td class="mono c-t">3:00/km</td><td class="mono">2:53/km</td><td class="mono">115*</td><td class="mono">165</td><td class="mono">176</td><td class="mono">537</td></tr>
+        <tr><td><span style="display:flex;align-items:center;gap:8px"><span class="rdot dot-t"></span>Nathan</span></td><td>3</td><td class="mono">78</td><td class="mono">399.7</td><td class="mono c-t">3:13/km</td><td class="mono">3:04/km</td><td class="mono">158</td><td class="mono">161</td><td class="mono">174</td><td class="mono">493</td></tr>
+        <tr><td><span style="display:flex;align-items:center;gap:8px"><span class="rdot dot-t"></span>Nathan</span></td><td>4</td><td class="mono">89</td><td class="mono">393.4</td><td class="mono c-t">3:49/km</td><td class="mono">3:07/km</td><td class="mono">160</td><td class="mono">165</td><td class="mono">163</td><td class="mono">452</td></tr>
+      </tbody>
+    </table>
+    <div style="margin-top:10px;font-size:.7rem;color:var(--tx3)">* Khalil S3 absent · Arthur : meilleur temps global S2 = 52s — 1:59/km · *FC Nathan S2 : artefact capteur probable</div>
+  </div>
+</div>
+
+<!-- ════════ 09 PROGRESSION ════════ -->
+<div class="slide" id="s9">
+  <div class="ghost">09</div>
+  <div class="l2c" style="width:100%;gap:28px;align-items:flex-start">
+    <div style="flex:1.6">
+      <span class="tag">Visualisation · Progression</span>
+      <span class="bar"></span>
+      <h2 style="margin-bottom:6px">Évolution du temps Tour 2 par séance</h2>
+      <p style="font-size:.8rem;margin-bottom:16px;color:var(--tx3)">Plus la valeur est basse, plus le coureur est rapide.</p>
+      <div style="height:330px;position:relative">
+        <canvas id="chart-progression"></canvas>
+      </div>
+    </div>
+    <div style="flex:.8;padding-top:48px">
+      <div class="card" style="margin-bottom:12px;padding:18px">
+        <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--tx3);margin-bottom:12px">Observations clés</div>
+        <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">
+          <span class="rdot dot-r" style="margin-top:4px"></span>
+          <span style="font-size:.8rem"><strong class="c-r">Arthur</strong> — 52s en S2, record. Très stable S1–S4. Profil élite.</span>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">
+          <span class="rdot dot-a" style="margin-top:4px"></span>
+          <span style="font-size:.8rem"><strong class="c-a">Adrien</strong> — Meilleure progression : 92s → 79s en S4. <strong>−14%</strong>.</span>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">
+          <span class="rdot dot-t" style="margin-top:4px"></span>
+          <span style="font-size:.8rem"><strong class="c-t">Nathan</strong> — Pic S2 (71s) puis retour S3–S4. Inconsistant.</span>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:10px">
+          <span class="rdot dot-p" style="margin-top:4px"></span>
+          <span style="font-size:.8rem"><strong class="c-p">Khalil</strong> — S3 manquante. Best: S1 (76s).</span>
+        </div>
+      </div>
+      <div class="card" style="background:var(--r2);border-color:var(--r3);padding:18px">
+        <div style="font-size:.68rem;color:var(--tx3);margin-bottom:4px">Écart global</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="mono c-r" style="font-size:1.8rem;font-weight:500">52s</span>
+          <span style="color:var(--border2)">→</span>
+          <span class="mono c-a" style="font-size:1.8rem;font-weight:500">96s</span>
+        </div>
+        <div style="font-size:.7rem;color:var(--tx3);margin-top:4px">tous coureurs, toutes séances</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ 10 COMPARAISON S4 ════════ -->
+<div class="slide" id="s10">
+  <div class="ghost">10</div>
+  <div class="full">
+    <span class="tag">Visualisation · Séance 4</span>
+    <span class="bar"></span>
+    <h2 style="margin-bottom:18px">Comparaison multi-métriques — Séance 4</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;height:340px">
+      <div class="card" style="display:flex;flex-direction:column;padding:16px">
+        <div style="font-size:.65rem;text-transform:uppercase;letter-spacing:.14em;color:var(--tx3);margin-bottom:10px">FC maximale (bpm)</div>
+        <div style="flex:1;position:relative"><canvas id="chart-fc"></canvas></div>
+      </div>
+      <div class="card" style="display:flex;flex-direction:column;padding:16px">
+        <div style="font-size:.65rem;text-transform:uppercase;letter-spacing:.14em;color:var(--tx3);margin-bottom:10px">Puissance moyenne (Watts)</div>
+        <div style="flex:1;position:relative"><canvas id="chart-power"></canvas></div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px">
+      <div class="card card-a" style="text-align:center;padding:14px 10px">
+        <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--a);margin-bottom:5px">Adrien · S4</div>
+        <div class="mono c-a" style="font-size:1.3rem;font-weight:500">3:53/km</div>
+        <div style="font-size:.7rem;color:var(--tx3);margin-top:3px">79s · 158 bpm</div>
+      </div>
+      <div class="card card-t" style="text-align:center;padding:14px 10px">
+        <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--t);margin-bottom:5px">Nathan · S4</div>
+        <div class="mono c-t" style="font-size:1.3rem;font-weight:500">3:49/km</div>
+        <div style="font-size:.7rem;color:var(--tx3);margin-top:3px">89s · 165 bpm</div>
+      </div>
+      <div class="card card-p" style="text-align:center;padding:14px 10px">
+        <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--p);margin-bottom:5px">Khalil · S4</div>
+        <div class="mono c-p" style="font-size:1.3rem;font-weight:500">2:58/km</div>
+        <div style="font-size:.7rem;color:var(--tx3);margin-top:3px">81s · 193 bpm</div>
+      </div>
+      <div class="card card-r" style="text-align:center;padding:14px 10px">
+        <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--r);margin-bottom:5px">Arthur · S4</div>
+        <div class="mono c-r" style="font-size:1.3rem;font-weight:500">2:15/km</div>
+        <div style="font-size:.7rem;color:var(--tx3);margin-top:3px">60s · 183 bpm</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ 11 RADAR ════════ -->
+<div class="slide" id="s11">
+  <div class="ghost">11</div>
+  <div class="l2c" style="width:100%;gap:28px;align-items:flex-start">
+    <div style="flex:1.4">
+      <span class="tag">Visualisation · Profil athlétique</span>
+      <span class="bar"></span>
+      <h2 style="margin-bottom:6px">Radar — Profil multi-métriques S4</h2>
+      <p style="font-size:.8rem;margin-bottom:16px;color:var(--tx3)">Valeurs normalisées (0–100) sur les 4 dimensions clés.</p>
+      <div style="height:340px;position:relative">
+        <canvas id="chart-radar"></canvas>
+      </div>
+    </div>
+    <div style="flex:1;padding-top:48px">
+      <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--tx3);margin-bottom:14px">Métriques normalisées (S4)</div>
+      <table class="dt" style="font-size:.8rem">
+        <thead><tr><th>Métrique</th><th class="c-a">Adrien</th><th class="c-t">Nathan</th><th class="c-p">Khalil</th><th class="c-r">Arthur</th></tr></thead>
+        <tbody>
+          <tr><td>Vitesse</td><td>57</td><td>60</td><td>71</td><td class="c-r" style="font-weight:600">100</td></tr>
+          <tr><td>FC max</td><td>82</td><td>85</td><td class="c-p" style="font-weight:600">100</td><td>95</td></tr>
+          <tr><td>Puissance</td><td>72</td><td>72</td><td>76</td><td class="c-r" style="font-weight:600">100</td></tr>
+          <tr><td>Cadence</td><td>80</td><td>78</td><td>85</td><td class="c-r" style="font-weight:600">100</td></tr>
+        </tbody>
+      </table>
+      <div class="card" style="margin-top:14px;background:var(--p2);border-color:rgba(167,139,250,.2);padding:16px">
+        <p style="font-size:.8rem"><strong style="color:var(--p)">Lecture :</strong> Arthur domine toutes les métriques. Khalil présente la FC max la plus élevée (193 bpm) pour une vitesse moindre — coût cardiaque plus important.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ 12 MÉTÉO ════════ -->
+<div class="slide" id="s12">
+  <div class="ghost">12</div>
+  <div class="l2c" style="width:100%;gap:28px;align-items:flex-start">
+    <div style="flex:1.4">
+      <span class="tag">Croisement Météo × Performance</span>
+      <span class="bar"></span>
+      <h2 style="margin-bottom:6px">Conditions météo par séance</h2>
+      <p style="font-size:.8rem;margin-bottom:16px;color:var(--tx3)">Source : Open-Meteo · Parc de Champagne · Données horaires</p>
+      <div style="height:310px;position:relative">
+        <canvas id="chart-meteo"></canvas>
+      </div>
+    </div>
+    <div style="flex:1;padding-top:48px">
+      <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--tx3);margin-bottom:14px">Détail par séance</div>
+      <table class="dt" style="font-size:.79rem;margin-bottom:14px">
+        <thead><tr><th>Séance</th><th>Date</th><th>Temp</th><th>Vent</th><th>Cond.</th></tr></thead>
+        <tbody>
+          <tr><td>S1</td><td class="mono">12/03</td><td class="mono">12.5°C</td><td class="mono">23.6</td><td>🌬️ Venteux</td></tr>
+          <tr><td>S2</td><td class="mono">19/03</td><td class="mono">15.4°C</td><td class="mono">15.1</td><td>🌤 Doux</td></tr>
+          <tr><td>S3</td><td class="mono">25/03</td><td class="mono">5.3°C</td><td class="mono">23.6</td><td>🌧 Pluie</td></tr>
+          <tr><td>S4</td><td class="mono">30/03</td><td class="mono">7.8°C</td><td class="mono">16.7</td><td>🌫 Humide</td></tr>
+        </tbody>
+      </table>
+      <div class="card" style="background:var(--t2);border-color:rgba(0,216,180,.2);padding:16px">
+        <p style="font-size:.8rem"><strong style="color:var(--t)">Observation :</strong> Les meilleures performances d'Arthur sont en S1 et S2 (plus froid). La météo clémente en S3–S4 ne se traduit pas en meilleures performances — d'autres facteurs entrent en jeu.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ 13 DISCUSSION CRITIQUE ════════ -->
+<div class="slide" id="s13">
+  <div class="ghost">13</div>
+  <div class="l2c" style="width:100%;gap:28px;align-items:flex-start">
+    <div class="col">
+      <span class="tag">Analyse critique</span>
+      <span class="bar"></span>
+      <h2 style="margin-bottom:22px">Ce que nos données ne disent pas</h2>
+      <div class="crit-row">
+        <span class="cr-icon">📡</span>
+        <div>
+          <div class="cr-title">Précision GPS ±3–5m</div>
+          <div class="cr-body">Sur 400m, une erreur de 5m = 1.25% d'incertitude. Les allures peuvent être biaisées sur les petits segments, notamment en virage.</div>
+        </div>
+      </div>
+      <div class="crit-row">
+        <span class="cr-icon">❤️</span>
+        <div>
+          <div class="cr-title">Délai de réponse cardiaque (~15s)</div>
+          <div class="cr-body">La FC reflète l'effort intégré passé. Pendant un sprint de 60s, la FC ne reflète jamais vraiment le pic cardiovasculaire.</div>
+        </div>
+      </div>
+      <div class="crit-row">
+        <span class="cr-icon">⚡</span>
+        <div>
+          <div class="cr-title">Puissance estimée (algorithme Garmin)</div>
+          <div class="cr-body">Calculée, non mesurée. Algorithme propriétaire non documenté — une boîte noire intégrant vitesse et accélération.</div>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div style="height:60px"></div>
+      <div class="crit-row">
+        <span class="cr-icon">🧪</span>
+        <div>
+          <div class="cr-title">Échantillon limité (n=4)</div>
+          <div class="cr-body">Aucune généralisation possible. Les comparaisons inter-individuelles sont descriptives, non statistiquement significatives.</div>
+        </div>
+      </div>
+      <div class="crit-row">
+        <span class="cr-icon">🌡️</span>
+        <div>
+          <div class="cr-title">Météo interpolée, non mesurée</div>
+          <div class="cr-body">Open-Meteo fournit des données horaires à la station la plus proche. Le microclimat du parc peut différer significativement.</div>
+        </div>
+      </div>
+      <div class="crit-row">
+        <span class="cr-icon">🎯</span>
+        <div>
+          <div class="cr-title">Détection Tour 2 : faux positifs possibles</div>
+          <div class="cr-body">Seuil à 75% du pic peut sélectionner le mauvais segment si la séance contient plusieurs efforts similaires.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ 14 CONCLUSION ════════ -->
+<div class="slide" id="s14">
+  <div class="ghost">14</div>
+  <div class="full">
+    <span class="tag">Conclusion</span>
+    <span class="bar"></span>
+    <h2 style="margin-bottom:28px">Ce que ce projet démontre</h2>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:22px">
+      <div class="card" style="display:flex;gap:14px;align-items:flex-start;border-left:2px solid var(--r);padding:22px">
+        <div class="ccl-num">⚙️</div>
+        <div>
+          <h3 style="margin-bottom:8px">Pipeline robuste</h3>
+          <p style="font-size:.82rem">FIT → Python → BDD → Streamlit. Automatisation complète sur VM. 15 runs analysés. Extensible sans intervention manuelle.</p>
+        </div>
+      </div>
+      <div class="card" style="display:flex;gap:14px;align-items:flex-start;border-left:2px solid var(--t);padding:22px">
+        <div class="ccl-num" style="border-color:rgba(0,216,180,.25)">📊</div>
+        <div>
+          <h3 style="margin-bottom:8px">Visualisations justifiées</h3>
+          <p style="font-size:.82rem">Chaque graphique répond à une question précise. Radar pour le profil, ligne pour la progression, barres pour la comparaison directe.</p>
+        </div>
+      </div>
+      <div class="card" style="display:flex;gap:14px;align-items:flex-start;border-left:2px solid var(--p);padding:22px">
+        <div class="ccl-num" style="border-color:rgba(167,139,250,.25)">🔍</div>
+        <div>
+          <h3 style="margin-bottom:8px">Esprit critique</h3>
+          <p style="font-size:.82rem">Biais GPS, délai FC, puissance estimée, météo interpolée, n=4 — toutes les limites sont identifiées et documentées.</p>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <span class="badge badge-r">Arthur : 52s record · 2:04/km</span>
+      <span class="badge badge-a">Adrien : −14% en 4 séances</span>
+      <span class="badge badge-p">Khalil : FC max 196 bpm</span>
+      <span class="badge badge-t">Nathan : 71s best en S2</span>
+      <span style="margin-left:auto;font-size:.75rem;color:var(--tx3)">→ Dashboard Streamlit disponible en live</span>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ 15 BIBLIOGRAPHIE ════════ -->
+<div class="slide" id="s15">
+  <div class="ghost">15</div>
+  <div class="full">
+    <span class="tag">Références</span>
+    <span class="bar"></span>
+    <h2 style="margin-bottom:24px">Bibliographie & Sources</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px">
+      <div>
+        <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--r);margin-bottom:14px">Données & APIs</div>
+        <div class="crit-row" style="margin-bottom:8px">
+          <span class="cr-icon">🌐</span>
+          <div><div class="cr-title">Open-Meteo API</div><div class="cr-body">open-meteo.com — Météo historique gratuite, résolution horaire, coordonnées GPS</div></div>
+        </div>
+        <div class="crit-row" style="margin-bottom:8px">
+          <span class="cr-icon">⌚</span>
+          <div><div class="cr-title">Garmin FIT Protocol SDK</div><div class="cr-body">developer.garmin.com/fit — Spécification format FIT, décodage messages second-par-second</div></div>
+        </div>
+        <div class="crit-row">
+          <span class="cr-icon">❤️</span>
+          <div><div class="cr-title">Polar OH1+ Documentation</div><div class="cr-body">polar.com — Spécifications techniques capteur optique OHR</div></div>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:var(--t);margin-bottom:14px">Outils & Librairies</div>
+        <div class="crit-row" style="margin-bottom:8px">
+          <span class="cr-icon">🐍</span>
+          <div><div class="cr-title">Python — Pandas, Streamlit, Plotly, Chart.js</div><div class="cr-body">Traitement FIT, pipeline d'extraction, visualisation interactive</div></div>
+        </div>
+        <div class="crit-row" style="margin-bottom:8px">
+          <span class="cr-icon">🗄️</span>
+          <div><div class="cr-title">MySQL & SQLite</div><div class="cr-body">Stockage structuré Tour 2, jointures FIT × météo, requêtes analytiques</div></div>
+        </div>
+        <div class="crit-row">
+          <span class="cr-icon">📊</span>
+          <div><div class="cr-title">Microsoft Power BI & GitLab IUT Reims</div><div class="cr-body">Dashboard décisionnel + versioning iut-info.univ-reims.fr/gitlab</div></div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:18px;text-align:center;padding:14px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);font-size:.78rem;color:var(--tx3)">
+      🎓 SAÉ 4 · IUT Informatique de Reims · 2025–2026 &nbsp;·&nbsp; Adrien MARTIN · Nathan · Khalil MOUGHAMIR · Arthur
+    </div>
+  </div>
+</div>
+
+</div><!-- /deck -->
+
+<script>
+// ── NAVIGATION ──
+const slides=[...document.querySelectorAll('.slide')];
+const total=slides.length;
+let cur=0;
+const chartsInit=new Set();
+document.getElementById('tot').textContent=String(total).padStart(2,'0');
+
+function goTo(idx){
+  if(idx<0||idx>=total)return;
+  slides[cur].classList.remove('on');
+  slides[cur].classList.add('out');
+  setTimeout(()=>slides[cur].classList.remove('out'),280);
+  cur=idx;
+  slides[cur].classList.add('on');
+  document.getElementById('cur').textContent=String(cur+1).padStart(2,'0');
+  document.getElementById('progress').style.width=((cur+1)/total*100)+'%';
+  initChartsForSlide(cur+1);
+}
+
+document.getElementById('next').onclick=()=>goTo(cur+1);
+document.getElementById('prev').onclick=()=>goTo(cur-1);
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();goTo(cur+1)}
+  if(e.key==='ArrowLeft'){e.preventDefault();goTo(cur-1)}
+});
+let tx=0;
+document.addEventListener('touchstart',e=>tx=e.touches[0].clientX);
+document.addEventListener('touchend',e=>{const d=tx-e.changedTouches[0].clientX;if(Math.abs(d)>50)goTo(d>0?cur+1:cur-1)});
+document.getElementById('progress').style.width=(1/total*100)+'%';
+
+// ── CHART DEFAULTS ──
+Chart.defaults.color='#71717a';
+Chart.defaults.font.family="'DM Mono',monospace";
+Chart.defaults.font.size=11;
+
+const C={a:'#fbbf24',t:'#00d8b4',p:'#a78bfa',r:'#ff4560'};
+
+function tip(){return{
+  backgroundColor:'rgba(9,9,11,.95)',
+  borderColor:'#27272a',borderWidth:1,
+  padding:10,cornerRadius:8,
+  titleColor:'#f4f4f5',bodyColor:'#a1a1aa'
+};}
+
+function initChartsForSlide(n){
+  if(chartsInit.has(n))return;
+  chartsInit.add(n);
+
+  if(n===9){
+    new Chart(document.getElementById('chart-progression').getContext('2d'),{
+      type:'line',
+      data:{
+        labels:['S1','S2','S3','S4'],
+        datasets:[
+          {label:'Adrien',data:[92,96,91,79],borderColor:C.a,backgroundColor:C.a+'18',pointBackgroundColor:C.a,borderWidth:2,pointRadius:5,tension:.35},
+          {label:'Nathan',data:[89,71,78,89],borderColor:C.t,backgroundColor:C.t+'18',pointBackgroundColor:C.t,borderWidth:2,pointRadius:5,tension:.35},
+          {label:'Khalil',data:[76,86,null,81],borderColor:C.p,backgroundColor:C.p+'18',pointBackgroundColor:C.p,borderWidth:2,pointRadius:5,tension:.35,spanGaps:false},
+          {label:'Arthur',data:[58,52,57,60],borderColor:C.r,backgroundColor:C.r+'18',pointBackgroundColor:C.r,borderWidth:2.5,pointRadius:5,tension:.35},
+        ]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{position:'top',labels:{padding:16,usePointStyle:true,pointStyleWidth:10}},tooltip:tip()},
+        scales:{
+          y:{title:{display:true,text:'Durée (s)',color:'#52525b'},grid:{color:'#1c1c1f'},ticks:{color:'#71717a'},min:40,max:105},
+          x:{grid:{color:'#1c1c1f'},ticks:{color:'#71717a'}}
+        }
+      }
+    });
+  }
+
+  if(n===10){
+    new Chart(document.getElementById('chart-fc').getContext('2d'),{
+      type:'bar',
+      data:{
+        labels:['Adrien','Nathan','Khalil','Arthur'],
+        datasets:[{
+          label:'FC max (bpm)',
+          data:[158,165,193,183],
+          backgroundColor:[C.a+'bb',C.t+'bb',C.p+'bb',C.r+'bb'],
+          borderColor:[C.a,C.t,C.p,C.r],
+          borderWidth:1.5,borderRadius:6,
+        }]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:tip()},
+        scales:{
+          y:{min:140,max:205,grid:{color:'#1c1c1f'},ticks:{color:'#71717a'},title:{display:true,text:'bpm',color:'#52525b'}},
+          x:{grid:{display:false},ticks:{color:'#71717a'}}
+        }
+      }
+    });
+    new Chart(document.getElementById('chart-power').getContext('2d'),{
+      type:'bar',
+      data:{
+        labels:['Adrien','Nathan','Khalil','Arthur'],
+        datasets:[{
+          label:'Puissance moy (W)',
+          data:[446,452,474,624],
+          backgroundColor:[C.a+'bb',C.t+'bb',C.p+'bb',C.r+'bb'],
+          borderColor:[C.a,C.t,C.p,C.r],
+          borderWidth:1.5,borderRadius:6,
+        }]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:tip()},
+        scales:{
+          y:{min:350,max:700,grid:{color:'#1c1c1f'},ticks:{color:'#71717a'},title:{display:true,text:'Watts',color:'#52525b'}},
+          x:{grid:{display:false},ticks:{color:'#71717a'}}
+        }
+      }
+    });
+  }
+
+  if(n===11){
+    new Chart(document.getElementById('chart-radar').getContext('2d'),{
+      type:'radar',
+      data:{
+        labels:['Vitesse','FC max','Puissance','Cadence'],
+        datasets:[
+          {label:'Adrien',data:[57,82,72,80],borderColor:C.a,backgroundColor:C.a+'1e',pointBackgroundColor:C.a,borderWidth:2},
+          {label:'Nathan',data:[60,85,72,78],borderColor:C.t,backgroundColor:C.t+'1e',pointBackgroundColor:C.t,borderWidth:2},
+          {label:'Khalil',data:[71,100,76,85],borderColor:C.p,backgroundColor:C.p+'1e',pointBackgroundColor:C.p,borderWidth:2},
+          {label:'Arthur',data:[100,95,100,100],borderColor:C.r,backgroundColor:C.r+'1e',pointBackgroundColor:C.r,borderWidth:2.5},
+        ]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{position:'bottom',labels:{padding:16,usePointStyle:true,pointStyleWidth:10}},tooltip:tip()},
+        scales:{r:{
+          min:0,max:100,
+          grid:{color:'#1c1c1f'},
+          ticks:{color:'#71717a',backdropColor:'transparent',stepSize:25},
+          pointLabels:{color:'#f4f4f5',font:{size:12,weight:'600'}}
+        }}
+      }
+    });
+  }
+
+  if(n===12){
+    new Chart(document.getElementById('chart-meteo').getContext('2d'),{
+      type:'bar',
+      data:{
+        labels:['S1','S2','S3','S4'],
+        datasets:[
+          {
+            label:'Meilleur temps Arthur (s)',
+            data:[58,52,57,60],
+            backgroundColor:C.r+'bb',borderColor:C.r,
+            borderWidth:1.5,borderRadius:5,yAxisID:'y1'
+          },
+          {
+            label:'Température (°C)',
+            data:[12.5,15.4,5.3,7.8],
+            type:'line',
+            borderColor:C.t,backgroundColor:C.t+'18',
+            pointBackgroundColor:C.t,borderWidth:2,
+            borderDash:[4,4],pointRadius:5,yAxisID:'y2'
+          }
+        ]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{position:'top',labels:{padding:14,usePointStyle:true}},tooltip:tip()},
+        scales:{
+          y1:{position:'left',title:{display:true,text:'Durée Tour 2 (s)',color:'#52525b'},grid:{color:'#1c1c1f'},ticks:{color:'#71717a'},min:40,max:75},
+          y2:{position:'right',title:{display:true,text:'Température (°C)',color:'#52525b'},grid:{display:false},ticks:{color:C.t},min:0,max:25},
+          x:{grid:{color:'#1c1c1f'},ticks:{color:'#71717a'}}
+        }
+      }
+    });
+  }
+}
+initChartsForSlide(1);
+</script>
+</body>
+</html>
