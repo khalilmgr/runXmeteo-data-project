@@ -24,7 +24,7 @@ st.set_page_config(
 COLORS = {
     "Adrien": "#E53935",
     "Nathan": "#2E7D32",
-    "Arthur": "#E65100",
+    "Arthur": "#FFCF39",
     "Khalil": "#1565C0",
 }
 
@@ -368,10 +368,6 @@ elif page == "Performance":
 elif page == "Biomécanique":
     st.title("Biomécanique & Effort")
 
-    # ── Radar normalisé ────────────────────────────────────────────────────────
-    st.subheader("Profil athlétique")
-    st.caption("Chaque axe normalisé 0–100 sur l'ensemble des données · score élevé = meilleure performance relative")
-
     RADAR = [
         ("Vitesse",   "Allure_s",      False),
         ("Endurance", "FC_moy",        False),
@@ -383,47 +379,65 @@ elif page == "Biomécanique":
                 if col in df.columns and df[col].notna().any()]
     categories = [r[0] for r in radar_ok] + [radar_ok[0][0]]
 
-    fig_r = go.Figure()
-    for _, row in df.iterrows():
-        coureur, seance = row["Coureur"], row["Séance"]
-        vals = []
-        for _, col_name, hib in radar_ok:
-            v = row.get(col_name)
-            if pd.isna(v):
-                vals.append(50.0)
-                continue
-            ref = df_all[col_name].dropna()
-            mn, mx = ref.min(), ref.max()
-            if mx == mn:
-                vals.append(50.0)
-            elif hib:
-                vals.append((v - mn) / (mx - mn) * 100)
-            else:
-                vals.append((mx - v) / (mx - mn) * 100)
-        vals.append(vals[0])
-        color = COLORS.get(coureur, "#888")
-        n_seances = df["Séance"].nunique()
-        opacity = min(0.12 + 0.12 * (seance - 1), 0.35)
+    # ── Comparaison directe radar ──────────────────────────────────────────────
+    st.subheader("Comparaison directe")
+    st.caption("Comparez deux coureurs sur une séance donnée")
 
-        fig_r.add_trace(go.Scatterpolar(
-            r=vals, theta=categories,
-            name=f"{coureur} S{seance}",
-            line=dict(color=color, width=2),
-            fill="toself",
-            fillcolor=color,
-            opacity=opacity,
-        ))
-    fig_r.update_layout(
-        **LAYOUT,
-        polar=dict(
-            bgcolor="#1a1a1a",
-            radialaxis=dict(visible=True, range=[0, 100], tickcolor="#555",
-                            gridcolor="#333", color="#888"),
-            angularaxis=dict(tickcolor="#555", gridcolor="#333", color="#e0e0e0"),
-        ),
-        height=430,
-    )
-    st.plotly_chart(fig_r, use_container_width=True)
+    if len(coureurs_sel) < 2:
+        st.warning("Sélectionnez au moins 2 coureurs dans la sidebar.")
+    else:
+        col_a, col_b, col_s = st.columns([2, 2, 1])
+        with col_a:
+            bio_ca = st.selectbox("Coureur A", coureurs_sel, index=0, key="bio_ca")
+        with col_b:
+            bio_cb = st.selectbox("Coureur B", [c for c in coureurs_sel if c != bio_ca], index=0, key="bio_cb")
+        with col_s:
+            bio_seance = st.selectbox("Séance", sorted(df["Séance"].unique()), key="bio_seance")
+
+        da = df[(df["Coureur"] == bio_ca) & (df["Séance"] == bio_seance)]
+        db_ = df[(df["Coureur"] == bio_cb) & (df["Séance"] == bio_seance)]
+
+        if da.empty or db_.empty:
+            st.warning("Données manquantes pour un des coureurs sur cette séance.")
+        else:
+            ra_bio, rb_bio = da.iloc[0], db_.iloc[0]
+            fig_r_cmp = go.Figure()
+            for runner, row in [(bio_ca, ra_bio), (bio_cb, rb_bio)]:
+                vals = []
+                for _, col_name, hib in radar_ok:
+                    v = row.get(col_name)
+                    if pd.isna(v):
+                        vals.append(50.0)
+                        continue
+                    ref = df_all[col_name].dropna()
+                    mn, mx = ref.min(), ref.max()
+                    if mx == mn:
+                        vals.append(50.0)
+                    elif hib:
+                        vals.append((v - mn) / (mx - mn) * 100)
+                    else:
+                        vals.append((mx - v) / (mx - mn) * 100)
+                vals.append(vals[0])
+                color = COLORS.get(runner, "#888")
+                fig_r_cmp.add_trace(go.Scatterpolar(
+                    r=vals, theta=categories,
+                    name=runner,
+                    line=dict(color=color, width=2),
+                    fill="toself",
+                    fillcolor=color,
+                    opacity=0.35,
+                ))
+            fig_r_cmp.update_layout(
+                **LAYOUT,
+                polar=dict(
+                    bgcolor="#1a1a1a",
+                    radialaxis=dict(visible=True, range=[0, 100], tickcolor="#555",
+                                   gridcolor="#333", color="#888"),
+                    angularaxis=dict(tickcolor="#555", gridcolor="#333", color="#e0e0e0"),
+                ),
+                height=430,
+            )
+            st.plotly_chart(fig_r_cmp, use_container_width=True)
 
     st.divider()
     col1, col2 = st.columns(2)
