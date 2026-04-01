@@ -233,18 +233,28 @@ def _load_from_postgres() -> pd.DataFrame:
         SELECT coureur AS "Coureur", seance AS "Séance", date_seance AS "Date",
                allure_moyenne_s AS "Allure_s", meilleure_allure_s AS "Sprint_s",
                distance_km*1000 AS "Distance_m", duree_secondes AS "Durée_s",
+               temps_400m_s AS "Temps400m_s",
                fc_moyenne AS "FC_moy", fc_maximale AS "FC_max",
                cadence_moyenne AS "Cadence_spm",
                puissance_moyenne_w AS "Puissance_w",
-               temperature_c, humidite_pct, vent_vitesse_kmh AS vent_kmh,
-               precipitation_mm
-        FROM performances_avec_meteo ORDER BY seance, allure_moyenne_s
+               temperature_c, temperature_ressentie_c, humidite_pct,
+               vent_vitesse_kmh AS vent_kmh, vent_direction_deg,
+               precipitation_mm, pression_hpa, uv_index
+        FROM performances_avec_meteo ORDER BY seance, temps_400m_s NULLS LAST, allure_moyenne_s
     """
     df = pd.read_sql(query, conn)
     conn.close()
     df["Allure_str"] = df["Allure_s"].apply(pace_str)
     df["Sprint_str"]  = df["Sprint_s"].apply(pace_str)
-    df["Temps400m_s"] = df.apply(lambda r: time_400m(r["Durée_s"], r["Distance_m"]), axis=1)
+    if "Temps400m_s" not in df.columns or df["Temps400m_s"].isna().all():
+        df["Temps400m_s"] = df.apply(lambda r: time_400m(r["Durée_s"], r["Distance_m"]), axis=1)
+    else:
+        # Fallback ligne à ligne si la valeur stockée est manquante.
+        df["Temps400m_s"] = df.apply(
+            lambda r: r["Temps400m_s"] if pd.notna(r["Temps400m_s"])
+            else time_400m(r["Durée_s"], r["Distance_m"]),
+            axis=1,
+        )
     df["Temps400m_str"] = df["Temps400m_s"].apply(
         lambda s: f"{int(s)//60}:{int(s)%60:02d}" if pd.notna(s) else "N/A"
     )

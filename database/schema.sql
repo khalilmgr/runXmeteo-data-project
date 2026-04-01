@@ -102,6 +102,10 @@ CREATE TABLE activites (
     -- Effort
     te_aerobie              NUMERIC(3,1), -- Training Effect aérobie (0.0–5.0)
 
+    -- Tour 2 (400m effort maximal — extrait des fichiers FIT)
+    temps_400m_s            NUMERIC(6,2), -- Temps normalisé à 400m exact (secondes)
+    sprint_s                INT,          -- Meilleure allure instantanée du Tour 2 (s/km)
+
     -- Temps
     temps_deplacement_s     INT,
     temps_ecoule_s          INT,
@@ -195,6 +199,8 @@ SELECT
                                     AS meilleure_allure,
     a.allure_moyenne_s,
     a.meilleure_allure_s,
+    a.temps_400m_s,
+    a.sprint_s,
 
     a.distance_km,
     a.duree_secondes,
