@@ -36,8 +36,17 @@ LAYOUT = dict(
     plot_bgcolor="rgba(0,0,0,0)",
     paper_bgcolor="rgba(0,0,0,0)",
     font=dict(color="#e0e0e0", family="monospace", size=12),
-    legend=dict(bgcolor="rgba(0,0,0,0)", bordercolor="#333", borderwidth=1),
-    margin=dict(t=50, b=40, l=50, r=30),
+    legend=dict(
+        bgcolor="rgba(0,0,0,0)", 
+        bordercolor="#333", 
+        borderwidth=1,
+        orientation="h",
+        yanchor="top",
+        y=-0.35,
+        xanchor="center",
+        x=0.5
+    ),
+    margin=dict(t=50, b=80, l=50, r=50),
     hoverlabel=dict(bgcolor="#1a1a1a", font_color="white", bordercolor="#555"),
 )
 
@@ -163,9 +172,9 @@ if page == "1 · KPI & Classement":
                         background:#1a1a1a; margin-bottom:8px;">
                 <h3 style="margin:0 0 10px 0; color:{color}; font-family:monospace;">{r['coureur']}</h3>
                 <p style="margin:4px 0; font-size:1.4em; color:#fff;">⏱ <b>{t400}</b> <span style="font-size:0.7em;color:#999">/ 400m</span></p>
-                <p style="margin:4px 0; color:#aaa;">❤️ FC max : <b style="color:#fff">{fc}</b></p>
-                <p style="margin:4px 0; color:#aaa;">👟 Cadence max : <b style="color:#fff">{cad}</b></p>
-                <p style="margin:4px 0; color:#aaa;">⚡ Puissance max : <b style="color:#fff">{pwr}</b></p>
+                <p style="margin:4px 0; color:#aaa;"> FC max : <b style="color:#fff">{fc}</b></p>
+                <p style="margin:4px 0; color:#aaa;"> Cadence max : <b style="color:#fff">{cad}</b></p>
+                <p style="margin:4px 0; color:#aaa;"> Puissance max : <b style="color:#fff">{pwr}</b></p>
             </div>""", unsafe_allow_html=True)
 
     st.divider()
@@ -1143,7 +1152,7 @@ elif page == "12 · Splits 100m":
         if seg is None or "dist_rel" not in seg.columns:
             return None
         seg = seg.dropna(subset=["dist_rel"]).copy()
-        if seg.empty or seg["dist_rel"].max() < 150:
+        if seg.empty or seg["dist_rel"].max() < 10:
             return None
         splits = []
         prev_t = 0.0
@@ -1210,14 +1219,14 @@ elif page == "12 · Splits 100m":
     st.caption("Ratio dernier 100m / premier 100m · < 1 = accélération finale · > 1 = ralentissement")
     ratio_rows = []
     for coureur, splits in all_splits.items():
-        if len(splits) >= 4:
+        if len(splits) >= 2:
             ratio = splits[-1]["Temps (s)"] / splits[0]["Temps (s)"]
             ratio_rows.append({
                 "Coureur": coureur,
                 "0–100m (s)": splits[0]["Temps (s)"],
                 "300–400m (s)": splits[-1]["Temps (s)"],
                 "Ratio fin/début": round(ratio, 3),
-                "Interprétation": "Accélère 🚀" if ratio < 0.95 else ("Stable ✅" if ratio < 1.05 else "Ralentit 📉"),
+                "Interprétation": "Accélère " if ratio < 0.95 else ("Stable " if ratio < 1.05 else "Ralentit "),
             })
     if ratio_rows:
         st.dataframe(pd.DataFrame(ratio_rows).set_index("Coureur"), use_container_width=True)
@@ -1409,31 +1418,49 @@ elif page == "15 · Puissance W/kg":
         df_cmp = df_cmp.sort_values("Puissance_wkg", ascending=False)
 
         fig2 = go.Figure()
+        
         fig2.add_trace(go.Bar(
             name="Watts bruts",
             x=df_cmp["Coureur"], y=df_cmp["Puissance_brute"],
             marker_color=[COLORS.get(c, "#888") for c in df_cmp["Coureur"]],
-            opacity=0.5,
+            opacity=0.3, 
             text=[f"{v:.0f}W" for v in df_cmp["Puissance_brute"]],
-            textposition="outside", textfont=dict(color="white"),
+            textposition="outside",
             yaxis="y1",
         ))
+        
         fig2.add_trace(go.Scatter(
             name="W/kg",
             x=df_cmp["Coureur"], y=df_cmp["Puissance_wkg"],
             mode="markers+text",
-            marker=dict(size=16, color=[COLORS.get(c, "#888") for c in df_cmp["Coureur"]],
+            marker=dict(size=18, color=[COLORS.get(c, "#888") for c in df_cmp["Coureur"]],
                         line=dict(width=2, color="#fff")),
             text=[f"{v:.2f}" for v in df_cmp["Puissance_wkg"]],
-            textposition="top center", textfont=dict(color="white"),
-            yaxis="y2",
+            textposition="top center",
+            yaxis="y2", 
         ))
+
         fig2.update_layout(
-            **LAYOUT, height=360,
-            yaxis=dict(**_AXIS, title="Watts"),
-            yaxis2=dict(**_AXIS, overlaying="y", side="right", title="W/kg", showgrid=False),
+            **LAYOUT, 
+            height=400,
+            showlegend=False, 
+            yaxis=dict(
+                **_AXIS, 
+                title="Watts",
+                range=[0, df_cmp["Puissance_brute"].max() * 1.2] 
+            ),
+            yaxis2=dict(
+                **_AXIS, 
+                overlaying="y", 
+                side="right", 
+                title="W/kg", 
+                showgrid=False,
+                range=[df_cmp["Puissance_wkg"].min() * 0.9, df_cmp["Puissance_wkg"].max() * 1.1],
+                zeroline=False
+            ),
         )
         st.plotly_chart(fig2, use_container_width=True)
+
 
 
 # ══════════════════════════════════════════════════════════════════════════════
