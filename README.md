@@ -5,6 +5,8 @@ IUT Reims-Châlons-Charleville · 2025-2026
 
 **Équipe :** Khalil · Adrien · Nathan · Arthur
 
+**Présentation diaporama :** [presentation-sae.vercel.app](https://presentation-sae.vercel.app/)
+
 ---
 
 ## Problématique
