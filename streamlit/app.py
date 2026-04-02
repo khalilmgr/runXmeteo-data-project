@@ -1,5 +1,5 @@
 """
-app.py — SAÉ Running Dashboard (refonte Tour 2)
+app.py :SAÉ Running Dashboard (refonte Tour 2)
 ───────────────────────────────────────────────
 Toutes les métriques sont calculées sur le Tour 2 (400m effort maximal).
 17 sections.
@@ -17,7 +17,7 @@ from db import load_data, load_fit_segment, load_all_tours, COUREURS_CONNUS, POI
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="SAÉ Running — Tour 2",
+    page_title="SAÉ Running :Tour 2",
     page_icon="🏃",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -69,22 +69,22 @@ TRANSLATIONS = {
     "Aucune donnée pour la sélection.": "No data for current selection.",
     "Source : **postgresql** · données **Tour 2** uniquement": "Source: **postgresql** · **Lap 2** data only",
     "Source : **csv** · données **Tour 2** uniquement": "Source: **csv** · **Lap 2** data only",
-    "KPI — Meilleurs résultats Tour 2": "KPI — Best Lap 2 Results",
+    "KPI :Meilleurs résultats Tour 2": "KPI :Best Lap 2 Results",
     "Temps au 400m & Conditions météo": "400m Time & Weather Conditions",
-    "Puissance & Effort — Tour 2": "Power & Effort — Lap 2",
-    "Face-à-tête — Comparaison 2 coureurs": "Head-to-Head — 2 Runner Comparison",
-    "Profil de vitesse instantanée — Tour 2": "Instant Speed Profile — Lap 2",
-    "Analyse des accélérations — Tour 2": "Acceleration Analysis — Lap 2",
+    "Puissance & Effort :Tour 2": "Power & Effort :Lap 2",
+    "Face-à-tête :Comparaison 2 coureurs": "Head-to-Head :2 Runner Comparison",
+    "Profil de vitesse instantanée :Tour 2": "Instant Speed Profile :Lap 2",
+    "Analyse des accélérations :Tour 2": "Acceleration Analysis :Lap 2",
     "Récupération cardiaque post-Tour 2": "Post-Lap 2 Heart Rate Recovery",
     "Heatmap Météo × Performance": "Weather × Performance Heatmap",
-    "Courbes de progression — Tour 2": "Progress Curves — Lap 2",
-    "Carte GPS — Simulation Tour 2": "GPS Map — Lap 2 Simulation",
+    "Courbes de progression :Tour 2": "Progress Curves :Lap 2",
+    "Carte GPS :Simulation Tour 2": "GPS Map :Lap 2 Simulation",
     "Comparaison Tour 1 / Tour 2 / Tour 3": "Lap 1 / Lap 2 / Lap 3 Comparison",
-    "Splits 100m — Tour 2": "100m Splits — Lap 2",
-    "Distribution des vitesses — Tour 2": "Speed Distribution — Lap 2",
-    "Allure instantanée — Tour 2": "Instant Pace — Lap 2",
-    "Puissance relative — W/kg": "Relative Power — W/kg",
-    "FC vs Distance — Tour 2": "HR vs Distance — Lap 2",
+    "Splits 100m :Tour 2": "100m Splits :Lap 2",
+    "Distribution des vitesses :Tour 2": "Speed Distribution :Lap 2",
+    "Allure instantanée :Tour 2": "Instant Pace :Lap 2",
+    "Puissance relative :W/kg": "Relative Power :W/kg",
+    "FC vs Distance :Tour 2": "HR vs Distance :Lap 2",
     "Vent & Conditions météo détaillées": "Wind & Detailed Weather Conditions",
     "Données météo non disponibles.": "Weather data unavailable.",
     "Données FIT non disponibles.": "FIT data unavailable.",
@@ -95,7 +95,7 @@ TRANSLATIONS = {
     "Coureur A": "Runner A",
     "Coureur B": "Runner B",
     "Records personnels sur l'ensemble des séances disponibles": "Personal records across all available sessions",
-    "Classement — Temps au 400m": "Ranking — 400m Time",
+    "Classement :Temps au 400m": "Ranking :400m Time",
     "FC max atteinte": "Max HR reached",
     "Conditions par séance": "Conditions by session",
     "Temps 400m & Température": "400m Time & Temperature",
@@ -106,10 +106,10 @@ TRANSLATIONS = {
     "FC moyenne Tour 2": "Lap 2 average HR",
     "Efficacité cardiovasculaire": "Cardiovascular efficiency",
     "Temps 400m séance par séance": "400m time session by session",
-    "Métriques clés — tableau comparatif": "Key metrics — comparison table",
-    "Radar — profil global (toutes séances)": "Radar — overall profile (all sessions)",
-    "Vitesse max instantanée — comparaison": "Instant max speed — comparison",
-    "Analyse des accélérations — Tour 2": "Acceleration analysis — Lap 2",
+    "Métriques clés :tableau comparatif": "Key metrics :comparison table",
+    "Radar :profil global (toutes séances)": "Radar :overall profile (all sessions)",
+    "Vitesse max instantanée :comparaison": "Instant max speed :comparison",
+    "Analyse des accélérations :Tour 2": "Acceleration analysis :Lap 2",
     "Récupération cardiaque post-Tour 2": "Post-Lap 2 heart-rate recovery",
     "Tableau de récupération": "Recovery table",
     "Heatmap Température × Coureur": "Temperature × Runner heatmap",
@@ -117,26 +117,26 @@ TRANSLATIONS = {
     "Humidité × Temps 400m": "Humidity × 400m Time",
     "Évolution absolue": "Absolute evolution",
     "Progression vs Séance 1 (%)": "Progress vs Session 1 (%)",
-    "Tableau de synthèse — Temps 400m toutes séances": "Summary table — 400m Time all sessions",
+    "Tableau de synthèse :Temps 400m toutes séances": "Summary table :400m Time all sessions",
     "Direction du vent par séance": "Wind direction by session",
     "Tableau météo complet par séance": "Full weather table by session",
     "Corrélation vent × performance": "Wind × performance correlation",
     "Vitesse max GPS par coureur": "GPS max speed by runner",
     "Profil au fil du temps": "Profile over time",
-    "Moyenne par tour — tous coureurs": "Average per lap — all runners",
-    "Tableau récapitulatif — moyennes par tour": "Summary table — lap averages",
+    "Moyenne par tour :tous coureurs": "Average per lap :all runners",
+    "Tableau récapitulatif :moyennes par tour": "Summary table :lap averages",
     "Temps par 100m (secondes)": "Time per 100m (seconds)",
     "Allure par 100m (min/km)": "Pace per 100m (min/km)",
     "Analyse : qui gère le mieux son effort ?": "Analysis: who manages effort best?",
     "Histogramme de vitesse (km/h)": "Speed histogram (km/h)",
-    "Violin plot — dispersion des vitesses": "Violin plot — speed dispersion",
+    "Violin plot :dispersion des vitesses": "Violin plot :speed dispersion",
     "Zones de vitesse (% du temps par zone)": "Speed zones (% of time per zone)",
-    "Comparaison toutes séances — allure min atteinte": "All sessions comparison — minimum pace reached",
+    "Comparaison toutes séances :allure min atteinte": "All sessions comparison :minimum pace reached",
     "W/kg par séance": "W/kg by session",
     "Comparaison Watts bruts vs W/kg": "Raw watts vs W/kg comparison",
     "FC vs Distance parcourue": "HR vs distance covered",
     "FC vs Vitesse (scatter)": "HR vs speed (scatter)",
-    "Indice de confort — Température ressentie vs Temps 400m": "Comfort index — felt temperature vs 400m Time",
+    "Indice de confort :Température ressentie vs Temps 400m": "Comfort index :felt temperature vs 400m Time",
     "X Axis": "X Axis",
     "Time (s)": "Time (s)",
     "Distance (m)": "Distance (m)",
@@ -262,10 +262,10 @@ if df.empty:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  1 — KPI & CLASSEMENT
+#  1 :KPI & CLASSEMENT
 # ══════════════════════════════════════════════════════════════════════════════
 if page_key == "kpi":
-    st.title(T("KPI — Meilleurs résultats Tour 2"))
+    st.title(T("KPI :Meilleurs résultats Tour 2"))
     st.caption(T("Records personnels sur l'ensemble des séances disponibles"))
 
     # Agrégation des records par coureur
@@ -310,7 +310,7 @@ if page_key == "kpi":
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader(T("Classement — Temps au 400m"))
+        st.subheader(T("Classement :Temps au 400m"))
         st.caption(T("Meilleur temps normalisé à 400m exact · Tour 2 uniquement"))
         df_r = pd.DataFrame(records).sort_values("best_t400")
         df_r["label"] = df_r["best_t400"].apply(fmt_time)
@@ -328,7 +328,7 @@ if page_key == "kpi":
 
     with col2:
         st.subheader(T("FC max atteinte"))
-        st.caption(T("Fréquence cardiaque maximale — Tour 2"))
+        st.caption(T("Fréquence cardiaque maximale :Tour 2"))
         df_r2 = pd.DataFrame(records).dropna(subset=["fc_max"]).sort_values("fc_max", ascending=False)
         fig2 = go.Figure(go.Bar(
             x=df_r2["coureur"], y=df_r2["fc_max"],
@@ -342,7 +342,7 @@ if page_key == "kpi":
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  2 — TEMPS 400M & MÉTÉO
+#  2 :TEMPS 400M & MÉTÉO
 # ══════════════════════════════════════════════════════════════════════════════
 elif page_key == "meteo":
     st.title(T("Temps au 400m & Conditions météo"))
@@ -475,10 +475,10 @@ elif page_key == "meteo":
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  3 — PUISSANCE & EFFORT
+#  3 :PUISSANCE & EFFORT
 # ══════════════════════════════════════════════════════════════════════════════
 elif page_key == "power":
-    st.title(T("Puissance & Effort — Tour 2"))
+    st.title(T("Puissance & Effort :Tour 2"))
 
     col1, col2 = st.columns(2)
 
@@ -573,10 +573,10 @@ elif page_key == "power":
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  4 — FACE-À-TÊTE
+#  4 :FACE-À-TÊTE
 # ══════════════════════════════════════════════════════════════════════════════
 elif page_key == "face":
-    st.title(T("Face-à-tête — Comparaison 2 coureurs"))
+    st.title(T("Face-à-tête :Comparaison 2 coureurs"))
 
     if len(coureurs_sel) < 2:
         st.warning(T("Sélectionnez au moins 2 coureurs dans la sidebar."))
@@ -611,7 +611,7 @@ elif page_key == "face":
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        st.subheader(T("Métriques clés — tableau comparatif"))
+        st.subheader(T("Métriques clés :tableau comparatif"))
 
         metrics = ["Temps400m_str", "FC_moy", "FC_max", "Cadence_spm", "Puissance_w"]
         labels  = ["Temps 400m", "FC moy (bpm)", "FC max (bpm)", "Cadence (spm)", "Puissance (W)"]
@@ -635,7 +635,7 @@ elif page_key == "face":
                      use_container_width=True, height=420)
 
     st.divider()
-    st.subheader(T("Radar — profil global (toutes séances)"))
+    st.subheader(T("Radar :profil global (toutes séances)"))
 
     RADAR_COLS = [
         ("Vitesse",   "Temps400m_s",  False),
@@ -679,10 +679,10 @@ elif page_key == "face":
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  5 — PROFIL DE VITESSE
+#  5 :PROFIL DE VITESSE
 # ══════════════════════════════════════════════════════════════════════════════
 elif page_key == "speed":
-    st.title(T("Profil de vitesse instantanée — Tour 2"))
+    st.title(T("Profil de vitesse instantanée :Tour 2"))
     st.caption(T("Courbe m/s second-par-second sur le lap d'effort maximal"))
 
     col_s, col_x = st.columns([2, 3])
@@ -720,7 +720,7 @@ elif page_key == "speed":
         st.info(T("Données FIT non disponibles pour cette sélection."))
 
     st.divider()
-    st.subheader(T("Vitesse max instantanée — comparaison"))
+    st.subheader(T("Vitesse max instantanée :comparaison"))
     vmax_rows = []
     for coureur in coureurs_sel:
         for s in seances_sel:
@@ -738,10 +738,10 @@ elif page_key == "speed":
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  6 — ACCÉLÉRATIONS
+#  6 :ACCÉLÉRATIONS
 # ══════════════════════════════════════════════════════════════════════════════
 elif page_key == "accel":
-    st.title(T("Analyse des accélérations — Tour 2"))
+    st.title(T("Analyse des accélérations :Tour 2"))
     st.caption(T("Dérivée de la vitesse (m/s²) · positif = accélération · négatif = ralentissement"))
 
     seance_a = st.selectbox(T("Séance"), sorted(df["Séance"].unique()))
@@ -812,7 +812,7 @@ elif page_key == "accel":
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  7 — RÉCUPÉRATION CARDIAQUE
+#  7 :RÉCUPÉRATION CARDIAQUE
 # ══════════════════════════════════════════════════════════════════════════════
 elif page_key == "recovery":
     st.title(T("Récupération cardiaque post-Tour 2"))
@@ -868,7 +868,7 @@ elif page_key == "recovery":
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  8 — HEATMAP MÉTÉO
+#  8 :HEATMAP MÉTÉO
 # ══════════════════════════════════════════════════════════════════════════════
 elif page_key == "heatmap":
     st.title(T("Heatmap Météo × Performance"))
@@ -954,10 +954,10 @@ elif page_key == "heatmap":
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  9 — PROGRESSION
+#  9 :PROGRESSION
 # ══════════════════════════════════════════════════════════════════════════════
 elif page_key == "progress":
-    st.title(T("Courbes de progression — Tour 2"))
+    st.title(T("Courbes de progression :Tour 2"))
     st.caption(T("Évolution séance par séance · Khalil absent S3 (maladie)"))
 
     metrique_p = st.radio(T("Métrique"), ["Temps400m_s", "FC_max", "Puissance_w"],
@@ -1021,24 +1021,24 @@ elif page_key == "progress":
         st.plotly_chart(fig2, use_container_width=True)
 
     st.divider()
-    st.subheader(T("Tableau de synthèse — Temps 400m toutes séances"))
+    st.subheader(T("Tableau de synthèse :Temps 400m toutes séances"))
     rows = []
     for coureur in sorted(coureurs_sel):
         row = {"Coureur": coureur}
         dc = df[df["Coureur"] == coureur].sort_values("Séance")
         for s in sorted(df_all["Séance"].unique()):
             r = dc[dc["Séance"] == s]
-            row[f"S{s}"] = r["Temps400m_str"].values[0] if not r.empty else "—"
+            row[f"S{s}"] = r["Temps400m_str"].values[0] if not r.empty else "-"
         dc_c = df[df["Coureur"] == coureur].dropna(subset=["Temps400m_s"])
-        row["Meilleur"] = dc_c.loc[dc_c["Temps400m_s"].idxmin(), "Temps400m_str"] if not dc_c.empty else "—"
+        row["Meilleur"] = dc_c.loc[dc_c["Temps400m_s"].idxmin(), "Temps400m_str"] if not dc_c.empty else "-"
         rows.append(row)
     st.dataframe(pd.DataFrame(rows).set_index("Coureur"), use_container_width=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  10 — CARTE GPS ANIMÉE
+#  10 :CARTE GPS ANIMÉE
 # ══════════════════════════════════════════════════════════════════════════════
 elif page_key == "gps":
-    st.title(T("Carte GPS — Simulation Tour 2"))
+    st.title(T("Carte GPS :Simulation Tour 2"))
     st.caption(T("Positionnement second-par-second sur le parcours réel · Parc de Champagne, Reims"))
 
     seance_map = st.selectbox(T("Séance"), sorted(df["Séance"].unique()), key="map_seance")
@@ -1163,11 +1163,11 @@ elif page_key == "gps":
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  11 — TOUR 1 / 2 / 3
+#  11 :TOUR 1 / 2 / 3
 # ══════════════════════════════════════════════════════════════════════════════
 elif page_key == "laps":
     st.title(T("Comparaison Tour 1 / Tour 2 / Tour 3"))
-    st.caption(T("Échauffement vs Effort maximal vs Récupération — structure réelle de la séance 3×400m"))
+    st.caption(T("Échauffement vs Effort maximal vs Récupération :structure réelle de la séance 3×400m"))
 
     seance_t = st.selectbox(T("Séance"), sorted(df["Séance"].unique()), key="t123_seance")
     metrique_t = st.radio(T("Metric"), [T("Speed (m/s)"), T("HR (bpm)"), T("Cadence (spm)")],
@@ -1211,7 +1211,7 @@ elif page_key == "laps":
             st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        st.subheader(T("Moyenne par tour — tous coureurs"))
+        st.subheader(T("Moyenne par tour :tous coureurs"))
         st.caption(T("Comparaison de l'effort moyen sur chaque tour"))
 
         summary_rows = []
@@ -1247,7 +1247,7 @@ elif page_key == "laps":
             st.plotly_chart(fig2, use_container_width=True)
 
     st.divider()
-    st.subheader(T("Tableau récapitulatif — moyennes par tour"))
+    st.subheader(T("Tableau récapitulatif :moyennes par tour"))
     recap = []
     for coureur in sorted(coureurs_sel):
         tours = load_all_tours(coureur, seance_t)
@@ -1259,19 +1259,19 @@ elif page_key == "laps":
             v_moy = tdf["enhanced_speed"].mean() * 3.6 if "enhanced_speed" in tdf.columns else None
             fc_moy = tdf["heart_rate"].mean() if "heart_rate" in tdf.columns else None
             dur = int(tdf["t_lap"].max()) if not tdf.empty else None
-            row[f"{label} — Allure"] = f"{v_moy:.1f} km/h" if v_moy else "N/A"
-            row[f"{label} — FC moy"] = f"{fc_moy:.0f} bpm" if fc_moy and not pd.isna(fc_moy) else "N/A"
-            row[f"{label} — Durée"] = f"{dur}s" if dur else "N/A"
+            row[f"{label} :Allure"] = f"{v_moy:.1f} km/h" if v_moy else "N/A"
+            row[f"{label} :FC moy"] = f"{fc_moy:.0f} bpm" if fc_moy and not pd.isna(fc_moy) else "N/A"
+            row[f"{label} :Durée"] = f"{dur}s" if dur else "N/A"
         recap.append(row)
     if recap:
         st.dataframe(pd.DataFrame(recap).set_index("Coureur"), use_container_width=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  12 — SPLITS 100M
+#  12 :SPLITS 100M
 # ══════════════════════════════════════════════════════════════════════════════
 elif page_key == "splits":
-    st.title(T("Splits 100m — Tour 2"))
+    st.title(T("Splits 100m :Tour 2"))
     st.caption(T("Temps pour chaque tranche de 100m · révèle la stratégie de course"))
 
     seance_sp = st.selectbox(T("Séance"), sorted(df["Séance"].unique()), key="split_seance")
@@ -1362,10 +1362,10 @@ elif page_key == "splits":
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  13 — DISTRIBUTION DES VITESSES
+#  13 :DISTRIBUTION DES VITESSES
 # ══════════════════════════════════════════════════════════════════════════════
 elif page_key == "dist":
-    st.title(T("Distribution des vitesses — Tour 2"))
+    st.title(T("Distribution des vitesses :Tour 2"))
     st.caption(T("Quelle % du lap chaque coureur passe à quelle vitesse ?"))
 
     seance_dv = st.selectbox(T("Séance"), sorted(df["Séance"].unique()), key="dv_seance")
@@ -1394,7 +1394,7 @@ elif page_key == "dist":
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        st.subheader(T("Violin plot — dispersion des vitesses"))
+        st.subheader(T("Violin plot :dispersion des vitesses"))
         fig2 = go.Figure()
         for coureur in coureurs_sel:
             seg = get_fit(coureur, seance_dv, "tour2")
@@ -1433,10 +1433,10 @@ elif page_key == "dist":
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  14 — ALLURE INSTANTANÉE
+#  14 :ALLURE INSTANTANÉE
 # ══════════════════════════════════════════════════════════════════════════════
 elif page_key == "pace":
-    st.title(T("Allure instantanée — Tour 2"))
+    st.title(T("Allure instantanée :Tour 2"))
     st.caption(T("min/km second-par-second · plus bas = plus rapide"))
 
     seance_ai = st.selectbox(T("Séance"), sorted(df["Séance"].unique()), key="ai_seance")
@@ -1472,7 +1472,7 @@ elif page_key == "pace":
     st.plotly_chart(fig, use_container_width=True)
 
     st.divider()
-    st.subheader(T("Comparaison toutes séances — allure min atteinte"))
+    st.subheader(T("Comparaison toutes séances :allure min atteinte"))
     fig2 = go.Figure()
     for coureur in coureurs_sel:
         pts = []
@@ -1500,10 +1500,10 @@ elif page_key == "pace":
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  15 — PUISSANCE W/KG
+#  15 :PUISSANCE W/KG
 # ══════════════════════════════════════════════════════════════════════════════
 elif page_key == "wkg":
-    st.title(T("Puissance relative — W/kg"))
+    st.title(T("Puissance relative :W/kg"))
     st.caption(T("Corrige le biais du profil Garmin Arthur 70 kg en rapportant la puissance au poids réel"))
 
     poids_info = " · ".join(f"{c} {POIDS.get(c, '?')} kg" for c in sorted(COUREURS_CONNUS) if c in coureurs_sel)
@@ -1593,10 +1593,10 @@ elif page_key == "wkg":
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  16 — FC VS DISTANCE
+#  16 :FC VS DISTANCE
 # ══════════════════════════════════════════════════════════════════════════════
 elif page_key == "hrdist":
-    st.title(T("FC vs Distance — Tour 2"))
+    st.title(T("FC vs Distance :Tour 2"))
     st.caption(T("Réponse cardiaque en fonction de la position sur le 400m"))
 
     seance_fd = st.selectbox(T("Séance"), sorted(df["Séance"].unique()), key="fd_seance")
@@ -1649,7 +1649,7 @@ elif page_key == "hrdist":
         st.plotly_chart(fig2, use_container_width=True)
 
     st.divider()
-    st.subheader(T("FC max / FC moy par 100m — qui souffre le plus en fin de course ?"))
+    st.subheader(T("FC max / FC moy par 100m :qui souffre le plus en fin de course ?"))
     fig3 = go.Figure()
     marks = [("0–100m", 0, 100), ("100–200m", 100, 200), ("200–300m", 200, 300), ("300–400m", 300, 400)]
     for coureur in coureurs_sel:
@@ -1675,7 +1675,7 @@ elif page_key == "hrdist":
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  17 — VENT & DIRECTION
+#  17 :VENT & DIRECTION
 # ══════════════════════════════════════════════════════════════════════════════
 elif page_key == "wind":
     st.title(T("Vent & Conditions météo détaillées"))
@@ -1689,7 +1689,7 @@ elif page_key == "wind":
 
     # ── Rose des vents par séance ──────────────────────────────────────────────
     st.subheader(T("Direction du vent par séance"))
-    st.caption(T("S1 & S3 : même force (23.6 km/h) mais directions opposées — impact potentiel différent sur le parcours"))
+    st.caption(T("S1 & S3 : même force (23.6 km/h) mais directions opposées :impact potentiel différent sur le parcours"))
 
     fig_wind = go.Figure()
     for _, row in df_meteo_all.iterrows():
@@ -1762,7 +1762,7 @@ elif page_key == "wind":
         st.plotly_chart(fig2, use_container_width=True)
 
     st.divider()
-    st.subheader(T("Indice de confort — Température ressentie vs Temps 400m"))
+    st.subheader(T("Indice de confort :Température ressentie vs Temps 400m"))
     df_res = df_all.dropna(subset=["temperature_ressentie_c", "Temps400m_s"])
     fig3 = go.Figure()
     for coureur in sorted(df_all["Coureur"].unique()):
