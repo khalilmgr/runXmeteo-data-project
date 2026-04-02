@@ -1173,7 +1173,7 @@ elif page_key == "laps":
     metrique_t = st.radio(T("Metric"), [T("Speed (m/s)"), T("HR (bpm)"), T("Cadence (spm)")],
                           horizontal=True, key="t123_met")
 
-    col_map = {"Vitesse (m/s)": "enhanced_speed", "FC (bpm)": "heart_rate", "Cadence (spm)": "cadence"}
+    col_map = {"Speed (m/s)": "enhanced_speed", "HR (bpm)": "heart_rate", "Cadence (spm)": "cadence"}
     col_t = col_map[metrique_t]
 
     TOUR_COLORS = {"Tour 1": "#607D8B", "Tour 2": "#FF5722", "Tour 3": "#4CAF50"}
