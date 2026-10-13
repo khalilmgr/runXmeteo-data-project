@@ -1,6 +1,6 @@
 # Impact of Weather on Running Performance
 
-Team data project (BUT Computer Science, Data track, IUT of Reims, 2025-2026): do weather conditions measurably affect 400 m running performance, and does the effect differ from one runner to another?
+End-of-year data project of my second year of the BUT Computer Science (Data track) at the IUT of Reims (2025-2026), done in a team of 4: do weather conditions measurably affect 400 m running performance, and does the effect differ from one runner to another?
 
 We collected our own running data with GPS watches, enriched it with historical weather, stored it in PostgreSQL and explored it through a Streamlit dashboard (17 sections) and a Power BI report.
 
